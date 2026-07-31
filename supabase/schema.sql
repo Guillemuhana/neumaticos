@@ -215,7 +215,10 @@ create policy ventas_leer on ventas for select to authenticated
 
 drop policy if exists ventas_crear on ventas;
 create policy ventas_crear on ventas for insert to authenticated
-  with check (vendedor_id = auth.uid() and public.mi_rol() in ('gerencia', 'vendedor'));
+  with check (
+    (public.mi_rol() = 'gerencia' and vendedor_id is not null)
+    or (public.mi_rol() = 'vendedor' and vendedor_id = auth.uid())
+  );
 
 drop policy if exists ventas_actualizar on ventas;
 create policy ventas_actualizar on ventas for update to authenticated

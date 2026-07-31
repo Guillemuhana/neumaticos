@@ -10,13 +10,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Boxes, ClipboardList, Receipt, Wallet } from 'lucide-react'
+import { Boxes, ClipboardList, Download, Receipt, Share2, Wallet } from 'lucide-react'
 import { eachDayOfInterval, format, startOfDay, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { numero, plata } from '../lib/formato'
-import { Aviso, Cargando, Encabezado, Metrica } from '../components/UI'
+import { Aviso, Boton, Cargando, Encabezado, Metrica } from '../components/UI'
 import { MARCA, PanelGrafico, Tooltip, ejeComun } from '../components/Grafico'
 
 const periodos = [
@@ -94,9 +94,64 @@ export default function Estadisticas() {
     (a, b) => b.cantidad - a.cantidad
   )
 
+  const generarCsv = () => {
+    const filas = [
+      ['Métrica', 'Valor'],
+      ['Facturado', plata(facturado)],
+      ['Ticket promedio', plata(ticket)],
+      ['Órdenes entregadas', numero(entregadas)],
+      ['Valor de inventario', plata(inventario)],
+      [],
+      ['Ventas por vendedor'],
+      ['Vendedor', 'Facturado'],
+      ...porVendedor.map((v) => [v.nombre, plata(v.total)]),
+      [],
+      ['Órdenes por mecánico'],
+      ['Mecánico', 'Órdenes'],
+      ...porMecanico.map((m) => [m.nombre, numero(m.cantidad)]),
+    ]
+
+    return filas.map((fila) => fila.map((celda) => `"${String(celda ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  }
+
+  const bajarCsv = () => {
+    const blob = new Blob([generarCsv()], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `estadisticas_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const compartirReporte = async () => {
+    const texto = `Reporte de gestión:\nFacturado: ${plata(facturado)}\nTicket promedio: ${plata(ticket)}\nÓrdenes entregadas: ${numero(entregadas)}\nValor de inventario: ${plata(inventario)}`
+
+    if (navigator.share) {
+      await navigator.share({
+        title: 'Reporte de estadísticas Pérez',
+        text: texto,
+      })
+    } else {
+      await navigator.clipboard.writeText(texto)
+      alert('Resumen copiado al portapapeles. Podés pegarlo en tu chat o mail.')
+    }
+  }
+
   return (
     <>
-      <Encabezado titulo="Estadísticas" detalle="Rendimiento del local para decidir con datos." />
+      <Encabezado titulo="Estadísticas" detalle="Rendimiento del local para decidir con datos.">
+        <div className="flex flex-wrap gap-2">
+          <Boton variante="secundario" onClick={bajarCsv}>
+            <Download size={16} /> Descargar CSV
+          </Boton>
+          <Boton variante="fantasma" onClick={compartirReporte}>
+            <Share2 size={16} /> Compartir
+          </Boton>
+        </div>
+      </Encabezado>
 
       {/* Un solo filtro arriba: alcanza a todos los gráficos de la vista. */}
       <div className="mb-6 flex gap-1 rounded-md border border-concreto-200 bg-white p-1 w-fit">

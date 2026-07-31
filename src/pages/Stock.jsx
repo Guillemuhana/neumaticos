@@ -83,9 +83,24 @@ export default function Stock() {
               return (
                 <tr key={p.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
                   <td data-label="Artículo" className="px-4 py-3">
-                    <p className="font-medium">{p.marca}</p>
-                    {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
-                  </td>
+                  <div className="flex items-center gap-3">
+                    {p.imagen_url ? (
+                      <img
+                        src={p.imagen_url}
+                        alt={p.marca}
+                        className="h-16 w-16 rounded-xl object-cover border border-concreto-200"
+                      />
+                    ) : (
+                      <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-concreto-200 bg-concreto-50 text-xs uppercase text-acero-500">
+                        Sin foto
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium">{p.marca}</p>
+                      {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
+                    </div>
+                  </div>
+                </td>
                   <td data-label="Medida" className="px-4 py-3 font-mono">
                     {p.medida}
                   </td>
@@ -126,6 +141,8 @@ export default function Stock() {
 
 function FormularioProducto({ producto, onCerrar, onGuardado }) {
   const [form, setForm] = useState(producto)
+  const [imagenFile, setImagenFile] = useState(null)
+  const [imagenPreview, setImagenPreview] = useState(producto.imagen_url || '')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
 
@@ -134,29 +151,58 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
     onChange: (e) => setForm({ ...form, [k]: e.target.value }),
   })
 
+  const subirImagen = async () => {
+    if (!imagenFile) return null
+
+    const nombre = `productos/${Date.now()}_${imagenFile.name}`
+    const { error: uploadError } = await supabase.storage
+      .from('productos')
+      .upload(nombre, imagenFile, { cacheControl: '3600', upsert: true })
+
+    if (uploadError) throw uploadError
+
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from('productos')
+      .getPublicUrl(nombre)
+
+    if (urlError) throw urlError
+    return urlData.publicUrl
+  }
+
   const guardar = async (e) => {
     e.preventDefault()
     setGuardando(true)
     setError('')
 
-    const fila = {
-      codigo: form.codigo?.trim() || null,
-      marca: form.marca.trim(),
-      medida: form.medida.trim(),
-      precio: Number(form.precio) || 0,
-      costo: Number(form.costo) || 0,
-      stock: Number(form.stock) || 0,
-      stock_minimo: Number(form.stock_minimo) || 0,
-    }
+    try {
+      const imagen_url = imagenFile
+        ? await subirImagen()
+        : form.imagen_url?.trim() || null
 
-    const { error } = form.id
-      ? await supabase.from('productos').update(fila).eq('id', form.id)
-      : await supabase.from('productos').insert(fila)
+      const fila = {
+        codigo: form.codigo?.trim() || null,
+        marca: form.marca.trim(),
+        medida: form.medida.trim(),
+        descripcion: form.descripcion?.trim() || null,
+        imagen_url,
+        precio: Number(form.precio) || 0,
+        costo: Number(form.costo) || 0,
+        stock: Number(form.stock) || 0,
+        stock_minimo: Number(form.stock_minimo) || 0,
+      }
 
-    if (error) {
-      setError(error.message)
+      const { error } = form.id
+        ? await supabase.from('productos').update(fila).eq('id', form.id)
+        : await supabase.from('productos').insert(fila)
+
+      if (error) {
+        setError(error.message)
+        setGuardando(false)
+      } else onGuardado()
+    } catch (err) {
+      setError(err.message ?? 'Error subiendo la imagen')
       setGuardando(false)
-    } else onGuardado()
+    }
   }
 
   return (
@@ -172,6 +218,33 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
           <Campo etiqueta="Código" ayuda="Opcional, interno o del proveedor">
             <input className={estiloInput} {...campo('codigo')} />
           </Campo>
+          <Campo etiqueta="Descripción" ayuda="Opcional, para más detalle del producto">
+            <input className={estiloInput} {...campo('descripcion')} />
+          </Campo>
+          <Campo etiqueta="Imagen" ayuda="Subí una foto o poné un enlace directo." >
+            <input
+              type="file"
+              accept="image/*"
+              className={estiloInput}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                setImagenFile(file)
+                setImagenPreview(URL.createObjectURL(file))
+              }}
+            />
+          </Campo>
+          <Campo etiqueta="URL de imagen" ayuda="Usar solo si ya hay una imagen en la web.">
+            <input
+              className={estiloInput}
+              placeholder="https://..."
+              value={form.imagen_url ?? ''}
+              onChange={(e) => {
+                setForm({ ...form, imagen_url: e.target.value })
+                setImagenPreview(e.target.value)
+              }}
+            />
+          </Campo>
           <Campo etiqueta="Stock">
             <input type="number" min="0" className={estiloInput} {...campo('stock')} />
           </Campo>
@@ -185,6 +258,12 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
             <input type="number" min="0" className={estiloInput} {...campo('stock_minimo')} />
           </Campo>
         </div>
+        {imagenPreview ? (
+          <div className="rounded-xl border border-concreto-200 p-4">
+            <p className="mb-2 text-sm font-medium text-caucho-800">Vista previa</p>
+            <img src={imagenPreview} alt="Preview" className="h-40 w-full rounded-xl object-cover" />
+          </div>
+        ) : null}
 
         <Aviso>{error}</Aviso>
 

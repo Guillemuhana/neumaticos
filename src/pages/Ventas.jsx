@@ -109,15 +109,26 @@ export default function Ventas() {
 }
 
 function NuevaVenta({ onCerrar, onGuardada }) {
-  const { sesion } = useAuth()
+  const { sesion, rol } = useAuth()
   const [cliente, setCliente] = useState('')
   const [notas, setNotas] = useState('')
   const [items, setItems] = useState([])
+  const [vendedorId, setVendedorId] = useState(rol === 'vendedor' ? sesion.user.id : '')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
 
   const { datos: productos } = useConsulta(
     () => supabase.from('productos').select('id, marca, medida, precio, stock').eq('activo', true).order('marca'),
+    []
+  )
+  const { datos: vendedores } = useConsulta(
+    () =>
+      supabase
+        .from('perfiles')
+        .select('id, nombre')
+        .eq('rol', 'vendedor')
+        .eq('activo', true)
+        .order('nombre'),
     []
   )
 
@@ -142,9 +153,9 @@ function NuevaVenta({ onCerrar, onGuardada }) {
   const guardar = async (e) => {
     e.preventDefault()
     if (items.length === 0) return setError('Agregá al menos un artículo.')
+    if (rol === 'gerencia' && !vendedorId) return setError('Elegí un vendedor para la venta.')
 
     setGuardando(true)
-    setError('')
 
     /* Cliente por nombre: si no existe se crea. Sin esto, cargar una venta
        obligaría a dar de alta el cliente en otra pantalla primero. */
@@ -174,7 +185,11 @@ function NuevaVenta({ onCerrar, onGuardada }) {
 
     const { data: venta, error: errVenta } = await supabase
       .from('ventas')
-      .insert({ cliente_id, vendedor_id: sesion.user.id, notas: notas.trim() || null })
+      .insert({
+        cliente_id,
+        vendedor_id: rol === 'gerencia' ? vendedorId : sesion.user.id,
+        notas: notas.trim() || null,
+      })
       .select('id')
       .single()
 
@@ -211,6 +226,23 @@ function NuevaVenta({ onCerrar, onGuardada }) {
             onChange={(e) => setCliente(e.target.value)}
           />
         </Campo>
+
+        {rol === 'gerencia' && (
+          <Campo etiqueta="Vendedor" ayuda="Elegí quién registró la venta.">
+            <select
+              className={estiloInput}
+              value={vendedorId}
+              onChange={(e) => setVendedorId(e.target.value)}
+            >
+              <option value="">Elegí un vendedor…</option>
+              {vendedores?.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.nombre}
+                </option>
+              ))}
+            </select>
+          </Campo>
+        )}
 
         <Campo etiqueta="Agregar artículo">
           <select

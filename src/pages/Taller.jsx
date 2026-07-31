@@ -131,8 +131,20 @@ function NuevaOrden({ onCerrar, onGuardada }) {
   const { sesion, rol } = useAuth()
   const [form, setForm] = useState({ vehiculo: '', patente: '', cliente: '', notas: '' })
   const [elegidos, setElegidos] = useState([])
+  const [mecanicoId, setMecanicoId] = useState(rol === 'mecanico' ? sesion.user.id : '')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
+
+  const { datos: mecanicos } = useConsulta(
+    () =>
+      supabase
+        .from('perfiles')
+        .select('id, nombre')
+        .eq('rol', 'mecanico')
+        .eq('activo', true)
+        .order('nombre'),
+    []
+  )
 
   const campo = (k) => ({
     value: form[k],
@@ -143,6 +155,12 @@ function NuevaOrden({ onCerrar, onGuardada }) {
     e.preventDefault()
     setGuardando(true)
     setError('')
+
+    if (rol === 'gerencia' && !mecanicoId) {
+      setError('Elegí un mecánico para la orden.')
+      setGuardando(false)
+      return
+    }
 
     let cliente_id = null
     const nombre = form.cliente.trim()
@@ -157,7 +175,7 @@ function NuevaOrden({ onCerrar, onGuardada }) {
 
     const { error } = await supabase.from('ordenes').insert({
       cliente_id,
-      mecanico_id: rol === 'mecanico' ? sesion.user.id : null,
+      mecanico_id: rol === 'mecanico' ? sesion.user.id : mecanicoId || null,
       vehiculo: form.vehiculo.trim(),
       patente: form.patente.trim().toUpperCase() || null,
       servicios: elegidos,
@@ -185,6 +203,23 @@ function NuevaOrden({ onCerrar, onGuardada }) {
         <Campo etiqueta="Cliente" ayuda="Tiene que estar cargado; si no, queda sin asociar.">
           <input className={estiloInput} {...campo('cliente')} />
         </Campo>
+
+        {rol === 'gerencia' && (
+          <Campo etiqueta="Mecánico" ayuda="Elegí quién realizará el trabajo.">
+            <select
+              className={estiloInput}
+              value={mecanicoId}
+              onChange={(e) => setMecanicoId(e.target.value)}
+            >
+              <option value="">Elegí un mecánico…</option>
+              {mecanicos?.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nombre}
+                </option>
+              ))}
+            </select>
+          </Campo>
+        )}
 
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium text-caucho-800">Servicios</legend>
