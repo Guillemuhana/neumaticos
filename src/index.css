@@ -8,11 +8,15 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
+  /* Escala completa: los pasos intermedios existen porque los componentes
+     los usan. Un paso que falta no da error, simplemente no pinta nada. */
+  --color-perez-900: #4E0E12;
   --color-perez-800: #6E141A;
   --color-perez-700: #8E1B22;
   --color-perez-600: #B3262C;
   --color-perez-500: #C8323A;
   --color-perez-300: #E4737A;
+  --color-perez-100: #F6DADC;
   --color-perez-50:  #FBEEEF;
 
   --color-caucho-950: #0E1013;
@@ -20,13 +24,22 @@
   --color-caucho-800: #22262C;
   --color-caucho-700: #313842;
   --color-acero-500: #6B7684;
+  --color-acero-400: #8A94A2;
   --color-acero-300: #AEB6C0;
   --color-acero-200: #D7DBE0;
   --color-concreto-50: #FAFAF8;
   --color-concreto-100: #F2F3F0;
   --color-concreto-200: #E5E7E2;
+
+  --color-atencion-700: #92400E;
   --color-atencion-600: #B45309;
+  --color-atencion-100: #FCE9CF;
+  --color-atencion-50:  #FEF6EC;
+
+  --color-conforme-700: #14603D;
   --color-conforme-500: #1C8A57;
+  --color-conforme-100: #D3EFE0;
+  --color-conforme-50:  #EAF7F0;
 }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -59,8 +72,57 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.015e
   outline-offset: 2px;
 }
 
+/* ---- Movimiento -------------------------------------------------------
+   Entradas cortas y una sola curva para todo: el sistema se siente de una
+   pieza, y nada tarda tanto como para estorbar a quien carga 20 ventas. */
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes aparecer {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.entrar { animation: entrar 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.aparecer { animation: aparecer 0.2s ease-out both; }
+
+/* Escalona las tarjetas de una grilla: llegan en cascada, no todas de golpe. */
+.cascada > * { animation: entrar 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.cascada > *:nth-child(1) { animation-delay: 0.02s; }
+.cascada > *:nth-child(2) { animation-delay: 0.06s; }
+.cascada > *:nth-child(3) { animation-delay: 0.10s; }
+.cascada > *:nth-child(4) { animation-delay: 0.14s; }
+.cascada > *:nth-child(5) { animation-delay: 0.18s; }
+.cascada > *:nth-child(6) { animation-delay: 0.22s; }
+
+/* Levanta la tarjeta apenas: sugiere que se puede tocar sin volverse un juguete. */
+.elevar {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease;
+}
+.elevar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -12px rgba(14, 16, 19, 0.22);
+}
+
+/* La barra de scroll por defecto de Windows corta el aire de la barra lateral. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-acero-300) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-acero-300);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--color-acero-400); background-clip: content-box; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .elevar:hover { transform: none; }
 }
 
 /* Tablas responsivas: filas tipo tarjeta para dispositivos móviles */

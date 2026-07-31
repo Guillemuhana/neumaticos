@@ -10,6 +10,11 @@ export function useConsulta(consulta, deps = []) {
 
   const recargar = useCallback(() => setPulso((n) => n + 1), [])
 
+  /* Siempre un texto: un error sin `message` dejaba el cartel vacío, que en
+     pantalla es indistinguible de "no pasó nada". */
+  const aTexto = (e) =>
+    e?.message || e?.error_description || e?.details || 'Error inesperado al consultar los datos.'
+
   useEffect(() => {
     let vigente = true
     setCargando(true)
@@ -24,13 +29,13 @@ export function useConsulta(consulta, deps = []) {
         }
 
         const { data, error } = resultado
-        if (error) setError(error.message)
+        if (error) setError(aTexto(error))
         else {
           setError('')
           setDatos(data)
         }
       })
-      .catch((e) => vigente && setError(e.message))
+      .catch((e) => vigente && setError(aTexto(e)))
       .finally(() => vigente && setCargando(false))
 
     return () => {

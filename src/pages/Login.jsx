@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
+import { ArrowRight, Eye, EyeOff, Mail } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { Boton, Campo, estiloInput, Aviso, Cargando } from '../components/UI'
 
@@ -7,6 +8,7 @@ export default function Login() {
   const { sesion, cargando, iniciarSesion } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [verClave, setVerClave] = useState(false)
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
 
@@ -58,7 +60,7 @@ export default function Login() {
       </div>
 
       <div className="flex items-center justify-center px-6 py-16">
-        <form onSubmit={enviar} className="w-full max-w-sm space-y-6 rounded-[2rem] border border-concreto-200/80 bg-white/95 p-8 shadow-2xl shadow-caucho-900/10 backdrop-blur-sm">
+        <form onSubmit={enviar} className="entrar w-full max-w-sm space-y-6 rounded-[2rem] border border-concreto-200/80 bg-white/95 p-8 shadow-2xl shadow-caucho-900/10 backdrop-blur-sm">
           <img
             src="/logo-perez.png"
             alt="Neumáticos y Servicios Pérez"
@@ -72,32 +74,57 @@ export default function Login() {
           </div>
 
           <Campo etiqueta="Correo">
-            <input
-              type="email"
-              required
-              autoComplete="username"
-              className={estiloInput}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="nombre@perez.com.ar"
-            />
+            <div className="relative">
+              <Mail
+                size={16}
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-acero-400"
+              />
+              <input
+                type="email"
+                required
+                autoComplete="username"
+                className={`${estiloInput} pl-9`}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="nombre@perez.com.ar"
+              />
+            </div>
           </Campo>
 
           <Campo etiqueta="Contraseña">
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              className={estiloInput}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                type={verClave ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                className={`${estiloInput} pr-11`}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              {/* Escribir una clave a ciegas desde el celular en el taller es
+                  la causa más común de "no me deja entrar". */}
+              <button
+                type="button"
+                onClick={() => setVerClave((v) => !v)}
+                aria-label={verClave ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-acero-400 transition-colors hover:bg-concreto-100 hover:text-caucho-800"
+              >
+                {verClave ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </Campo>
 
           <Aviso>{error}</Aviso>
 
-          <Boton type="submit" disabled={enviando} className="w-full">
+          <Boton type="submit" disabled={enviando} className="group w-full">
             {enviando ? 'Entrando…' : 'Entrar'}
+            {!enviando && (
+              <ArrowRight
+                size={16}
+                className="transition-transform duration-200 group-hover:translate-x-0.5"
+              />
+            )}
           </Boton>
         </form>
       </div>

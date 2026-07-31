@@ -54,7 +54,7 @@ export default function Inicio() {
         detalle="Lo que está pasando hoy en el local."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="cascada grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metrica
           icono={Receipt}
           tono="marca"

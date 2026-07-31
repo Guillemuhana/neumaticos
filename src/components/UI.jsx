@@ -100,7 +100,7 @@ export function Metrica({ icono: Icono, titulo, valor, pie, tono = 'neutro', cla
 
   return (
     <Tarjeta
-      className={`p-6 ${onClick ? 'cursor-pointer hover:shadow-md' : ''} ${className}`}
+      className={`elevar p-6 ${onClick ? 'cursor-pointer' : ''} ${className}`}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -195,14 +195,14 @@ export function Modal({ titulo, onCerrar, children }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-caucho-950/50 p-4 sm:items-center"
+      className="aparecer fixed inset-0 z-50 flex items-end justify-center bg-caucho-950/60 p-4 backdrop-blur-sm sm:items-center"
       onMouseDown={(e) => e.target === e.currentTarget && onCerrar()}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-2xl"
+        className="entrar max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[1.5rem] bg-white shadow-2xl"
       >
         <div className="sticky top-0 flex items-center justify-between border-b border-concreto-200 bg-white px-5 py-4">
           <h2 className="display text-lg font-bold">{titulo}</h2>

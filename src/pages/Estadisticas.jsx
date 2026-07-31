@@ -31,6 +31,25 @@ export default function Estadisticas() {
   const { datos, cargando, error } = useConsulta(async () => {
     const desde = startOfDay(subDays(new Date(), dias - 1)).toISOString()
 
+    /* La columna `categoria` es reciente: si la base todavía no la tiene,
+       se reintenta sin ella en vez de dejar la pantalla vacía. */
+    const conCategoria = async (select, sinCategoria) => {
+      const r = await select()
+      if (!r.error) return r
+      if (r.error.message?.toLowerCase().includes('categoria')) return sinCategoria()
+      return r
+    }
+
+    /* `!inner` es obligatorio para que los filtros sobre `ventas` apliquen:
+       sin él PostgREST devuelve el ítem igual, con ventas en null, y las
+       cotizaciones y los meses viejos se cuelan en el total. */
+    const items = (campos) => () =>
+      supabase
+        .from('venta_items')
+        .select(`cantidad, precio_unitario, productos(${campos}), ventas!inner(creada_en, estado)`)
+        .eq('ventas.estado', 'confirmada')
+        .gte('ventas.creada_en', desde)
+
     const [ventas, ordenes, productos, ventasDetalle] = await Promise.all([
       supabase
         .from('ventas')
@@ -41,45 +60,24 @@ export default function Estadisticas() {
         .from('ordenes')
         .select('id, vehiculo, patente, servicios, estado, notas, creada_en, perfiles(nombre)')
         .gte('creada_en', desde),
-      supabase.from('productos').select('stock, costo, categoria').eq('activo', true),
-      supabase
-        .from('venta_items')
-        .select('cantidad, precio_unitario, productos(marca, medida, categoria), ventas(creada_en, estado)')
-        .eq('ventas.estado', 'confirmada')
-        .gte('ventas.creada_en', desde),
+      conCategoria(
+        () => supabase.from('productos').select('stock, costo, categoria').eq('activo', true),
+        () => supabase.from('productos').select('stock, costo').eq('activo', true)
+      ),
+      conCategoria(items('marca, medida, categoria'), items('marca, medida')),
     ])
 
-    let productosData = productos.data
-    if (productos.error?.message?.includes('column "categoria" does not exist')) {
-      const fallbackProductos = await supabase.from('productos').select('stock, costo').eq('activo', true)
-      if (fallbackProductos.error) return { error: fallbackProductos.error }
-      productosData = fallbackProductos.data
-    }
-
-    let ventasDetalleData = ventasDetalle.data
-    if (ventasDetalle.error?.message?.includes('column "categoria" does not exist')) {
-      const fallback = await supabase
-        .from('venta_items')
-        .select('cantidad, precio_unitario, productos(marca, medida), ventas(creada_en, estado)')
-        .eq('ventas.estado', 'confirmada')
-        .gte('ventas.creada_en', desde)
-      if (fallback.error) return { error: fallback.error }
-      ventasDetalleData = fallback.data
-    }
-
-    const fallo =
-      ventas.error ||
-      ordenes.error ||
-      productos.error?.message && !productos.error.message.includes('column "categoria" does not exist') ||
-      (ventasDetalle.error && !ventasDetalle.error.message.includes('column "categoria" does not exist'))
+    /* Devolver el error entero, no un booleano: el hook lee `.message`, y un
+       `true` suelto dejaba el cartel vacío — que es la pantalla en blanco. */
+    const fallo = [ventas, ordenes, productos, ventasDetalle].find((r) => r.error)?.error
     if (fallo) return { error: fallo }
 
     return {
       data: {
         ventas: ventas.data,
         ordenes: ordenes.data,
-        productos: productosData,
-        ventasDetalle: ventasDetalleData,
+        productos: productos.data,
+        ventasDetalle: ventasDetalle.data,
       },
     }
   }, [dias])
@@ -259,14 +257,15 @@ export default function Estadisticas() {
       </Encabezado>
 
       {/* Un solo filtro arriba: alcanza a todos los gráficos de la vista. */}
-      <div className="mb-6 flex gap-1 rounded-md border border-concreto-200 bg-white p-1 w-fit">
+      <div className="mb-6 flex w-fit gap-1 rounded-full border border-concreto-200 bg-white p-1 shadow-sm">
         {periodos.map((p) => (
           <button
             key={p.dias}
             onClick={() => setDias(p.dias)}
-            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+            aria-pressed={dias === p.dias}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
               dias === p.dias
-                ? 'bg-perez-600 text-white'
+                ? 'bg-perez-600 text-white shadow-sm shadow-perez-900/20'
                 : 'text-acero-500 hover:bg-concreto-100 hover:text-caucho-800'
             }`}
           >
@@ -275,7 +274,7 @@ export default function Estadisticas() {
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="cascada grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metrica icono={Receipt} tono="marca" titulo="Facturado" valor={plata(facturado)} pie={`${ventas.length} ventas confirmadas`} />
         <Metrica icono={Wallet} titulo="Ticket promedio" valor={plata(ticket)} pie="Por venta confirmada" />
         <Metrica icono={Receipt} titulo="Ventas hoy" valor={numero(ventasHoy.length)} pie="Ventas confirmadas en el día" />
