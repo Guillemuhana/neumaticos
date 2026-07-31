@@ -86,6 +86,7 @@ export default function Estadisticas() {
 
   if (cargando) return <Cargando texto="Calculando…" alto="min-h-[60vh]" />
   if (error) return <Aviso>{error}</Aviso>
+  if (!datos) return <Aviso>Ocurrió un error inesperado al cargar las estadísticas.</Aviso>
 
   const { ventas, ordenes, productos, ventasDetalle } = datos
 

@@ -15,8 +15,15 @@ export function useConsulta(consulta, deps = []) {
     setCargando(true)
 
     consulta()
-      .then(({ data, error }) => {
+      .then((resultado) => {
         if (!vigente) return
+        if (!resultado) {
+          setError('La consulta no devolvió datos.')
+          setDatos(null)
+          return
+        }
+
+        const { data, error } = resultado
         if (error) setError(error.message)
         else {
           setError('')
