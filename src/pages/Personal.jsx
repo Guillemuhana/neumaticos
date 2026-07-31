@@ -79,14 +79,18 @@ export default function Personal() {
         ) : (
           <Tabla columnas={puede('gerencia') ? ['Empleado', 'Tipo', 'Momento'] : ['Tipo', 'Momento']}>
             {datos.map((f) => (
-              <tr key={f.id} className="hover:bg-concreto-50">
+              <tr key={f.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
                 {puede('gerencia') && (
-                  <td className="px-4 py-3 font-medium">{f.perfiles?.nombre ?? '—'}</td>
+                  <td data-label="Empleado" className="px-4 py-3 font-medium">
+                    {f.perfiles?.nombre ?? '—'}
+                  </td>
                 )}
-                <td className="px-4 py-3">
+                <td data-label="Tipo" className="px-4 py-3">
                   <Etiqueta tono={f.tipo === 'ingreso' ? 'conforme' : 'neutro'}>{f.tipo}</Etiqueta>
                 </td>
-                <td className="px-4 py-3 text-acero-500">{fecha(f.momento)}</td>
+                <td data-label="Momento" className="px-4 py-3 text-acero-500">
+                  {fecha(f.momento)}
+                </td>
               </tr>
             ))}
           </Tabla>

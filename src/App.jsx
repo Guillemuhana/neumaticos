@@ -9,6 +9,7 @@ import Stock from './pages/Stock'
 import Ventas from './pages/Ventas'
 import Taller from './pages/Taller'
 import Personal from './pages/Personal'
+import Clientes from './pages/Clientes'
 
 /* Estadísticas arrastra recharts (~300 kB). Es la única pantalla que lo usa y
    solo la ve gerencia: cargarla aparte le ahorra la descarga a todo el resto,
@@ -41,6 +42,9 @@ function RutaPrivada({ children }) {
       <div className="mx-auto max-w-md px-6 py-20">
         <Aviso tono="atencion">
           Tu usuario no tiene perfil cargado. Pedile a gerencia que te dé de alta.
+          <br />
+          Sesión iniciada como <strong>{sesion.user.email}</strong>{' '}
+          (ID: <code>{sesion.user.id}</code>).
         </Aviso>
       </div>
     )
@@ -99,6 +103,14 @@ export default function App() {
           }
         />
         <Route path="/personal" element={<Personal />} />
+        <Route
+          path="/clientes"
+          element={
+            <SoloRoles roles={['gerencia', 'vendedor']}>
+              <Clientes />
+            </SoloRoles>
+          }
+        />
         <Route
           path="/estadisticas"
           element={

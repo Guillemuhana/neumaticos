@@ -81,19 +81,23 @@ export default function Stock() {
             {filtrados.map((p) => {
               const critico = p.stock <= p.stock_minimo
               return (
-                <tr key={p.id} className="hover:bg-concreto-50">
-                  <td className="px-4 py-3">
+                <tr key={p.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
+                  <td data-label="Artículo" className="px-4 py-3">
                     <p className="font-medium">{p.marca}</p>
                     {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
                   </td>
-                  <td className="px-4 py-3 font-mono">{p.medida}</td>
-                  <td className="px-4 py-3 tabular-nums">{plata(p.precio)}</td>
-                  <td className="px-4 py-3">
+                  <td data-label="Medida" className="px-4 py-3 font-mono">
+                    {p.medida}
+                  </td>
+                  <td data-label="Precio" className="px-4 py-3 tabular-nums">
+                    {plata(p.precio)}
+                  </td>
+                  <td data-label="Stock" className="px-4 py-3">
                     <span className="mr-2 font-mono font-semibold tabular-nums">{p.stock}</span>
                     {critico && <Etiqueta tono="atencion">reponer</Etiqueta>}
                   </td>
                   {gestiona && (
-                    <td className="px-4 py-3 text-right">
+                    <td data-label="Acciones" className="px-4 py-3 text-right">
                       <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(p)}>
                         Editar
                       </Boton>

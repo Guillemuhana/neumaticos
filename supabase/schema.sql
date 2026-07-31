@@ -64,6 +64,7 @@ create table if not exists productos (
   marca         text not null,
   medida        text not null,            -- 205/55 R16
   descripcion   text,
+  imagen_url    text,
   precio        numeric(12,2) not null default 0,
   costo         numeric(12,2) not null default 0,
   stock         integer not null default 0,

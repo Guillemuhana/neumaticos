@@ -20,6 +20,7 @@ const navegacion = [
   { a: '/', texto: 'Panel', icono: LayoutDashboard, roles: ['gerencia', 'vendedor', 'mecanico'] },
   { a: '/stock', texto: 'Stock', icono: Boxes, roles: ['gerencia', 'vendedor'] },
   { a: '/ventas', texto: 'Ventas', icono: Receipt, roles: ['gerencia', 'vendedor'] },
+  { a: '/clientes', texto: 'Clientes', icono: Users, roles: ['gerencia', 'vendedor'] },
   { a: '/taller', texto: 'Taller', icono: ClipboardList, roles: ['gerencia', 'mecanico'] },
   { a: '/personal', texto: 'Personal', icono: Users, roles: ['gerencia', 'vendedor', 'mecanico'] },
   { a: '/estadisticas', texto: 'Estadísticas', icono: BarChart3, roles: ['gerencia'] },
@@ -61,19 +62,19 @@ export default function Layout() {
   )
 
   const panel = (
-    <div className="flex h-full flex-col gap-6 bg-caucho-900 p-4">
-      <div className="rounded-lg bg-white p-3">
+    <div className="flex h-full flex-col gap-6 bg-caucho-950/95 p-5 shadow-2xl shadow-caucho-950/10">
+      <div className="rounded-[1.5rem] bg-white/95 p-4 shadow-sm shadow-caucho-950/10">
         <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-full" />
       </div>
 
       {enlaces}
 
-      <div className="mt-auto border-t border-caucho-800 pt-4">
-        <p className="truncate text-sm font-medium text-white">{perfil?.nombre}</p>
-        <p className="font-mono text-xs text-acero-500">{nombreRol[rol] ?? '—'}</p>
+      <div className="mt-auto rounded-[1.5rem] border border-caucho-800/50 bg-caucho-900/60 p-4 text-white">
+        <p className="truncate text-sm font-semibold">{perfil?.nombre}</p>
+        <p className="mt-1 font-mono text-xs text-acero-300">{nombreRol[rol] ?? '—'}</p>
         <Boton
           variante="fantasma"
-          className="mt-3 w-full justify-start text-acero-300 hover:bg-caucho-800 hover:text-white"
+          className="mt-4 w-full justify-start rounded-full border border-white/10 bg-white/5 text-white hover:bg-white/10"
           onClick={cerrarSesion}
         >
           <LogOut size={16} /> Salir
@@ -88,7 +89,7 @@ export default function Layout() {
         <div className="sticky top-0 h-screen">{panel}</div>
       </aside>
 
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-concreto-200 bg-white px-4 py-3 lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-concreto-200/80 bg-white/90 px-4 py-3 backdrop-blur-sm lg:hidden">
         <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-28" />
         <Boton variante="fantasma" onClick={() => setAbierto(true)} aria-label="Abrir menú">
           <Menu size={20} />
@@ -117,7 +118,7 @@ export default function Layout() {
       )}
 
       <main className="px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-6xl rounded-[2rem] border border-concreto-200/80 bg-white/90 p-6 shadow-sm shadow-caucho-900/5 backdrop-blur-sm">
           <Outlet />
         </div>
       </main>

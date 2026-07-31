@@ -58,16 +58,26 @@ export default function Ventas() {
         ) : (
           <Tabla columnas={['Fecha', 'Cliente', 'Vendedor', 'Ítems', 'Total', 'Estado', '']}>
             {datos.map((v) => (
-              <tr key={v.id} className="hover:bg-concreto-50">
-                <td className="px-4 py-3 whitespace-nowrap text-acero-500">{fecha(v.creada_en)}</td>
-                <td className="px-4 py-3 font-medium">{v.clientes?.nombre ?? 'Consumidor final'}</td>
-                <td className="px-4 py-3 text-acero-500">{v.perfiles?.nombre ?? '—'}</td>
-                <td className="px-4 py-3 font-mono">{v.venta_items?.length ?? 0}</td>
-                <td className="px-4 py-3 font-semibold tabular-nums">{plata(v.total)}</td>
-                <td className="px-4 py-3">
+              <tr key={v.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
+                <td data-label="Fecha" className="px-4 py-3 whitespace-nowrap text-acero-500">
+                  {fecha(v.creada_en)}
+                </td>
+                <td data-label="Cliente" className="px-4 py-3 font-medium">
+                  {v.clientes?.nombre ?? 'Consumidor final'}
+                </td>
+                <td data-label="Vendedor" className="px-4 py-3 text-acero-500">
+                  {v.perfiles?.nombre ?? '—'}
+                </td>
+                <td data-label="Ítems" className="px-4 py-3 font-mono">
+                  {v.venta_items?.length ?? 0}
+                </td>
+                <td data-label="Total" className="px-4 py-3 font-semibold tabular-nums">
+                  {plata(v.total)}
+                </td>
+                <td data-label="Estado" className="px-4 py-3">
                   <Etiqueta tono={tonoEstado[v.estado]}>{textoEstado[v.estado]}</Etiqueta>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td data-label="Acciones" className="px-4 py-3 text-right">
                   {v.estado === 'cotizacion' && (
                     <Boton variante="fantasma" className="px-2 py-1" onClick={() => cambiarEstado(v, 'confirmada')}>
                       <Check size={15} /> Confirmar

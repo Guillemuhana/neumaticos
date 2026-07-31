@@ -31,11 +31,11 @@ export default function Login() {
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
       {/* Panel de marca: el logo montado como chapa de taller */}
-      <div className="relative hidden flex-col justify-between bg-caucho-900 p-12 lg:flex">
+      <div className="relative hidden flex-col justify-between bg-caucho-950/95 p-12 lg:flex">
         <span className="franja absolute inset-y-0 left-0 w-3" aria-hidden="true" />
 
         <div className="flex flex-1 items-center justify-center pl-6">
-          <div className="rounded-xl bg-white p-8 shadow-2xl shadow-black/40">
+          <div className="rounded-[2rem] bg-white p-8 shadow-2xl shadow-caucho-950/20">
             <img
               src="/logo-perez.png"
               alt="Neumáticos y Servicios Pérez"
@@ -58,15 +58,15 @@ export default function Login() {
       </div>
 
       <div className="flex items-center justify-center px-6 py-16">
-        <form onSubmit={enviar} className="w-full max-w-sm space-y-5">
+        <form onSubmit={enviar} className="w-full max-w-sm space-y-6 rounded-[2rem] border border-concreto-200/80 bg-white/95 p-8 shadow-2xl shadow-caucho-900/10 backdrop-blur-sm">
           <img
             src="/logo-perez.png"
             alt="Neumáticos y Servicios Pérez"
             className="mb-2 w-40 lg:hidden"
           />
           <div>
-            <h2 className="display text-2xl font-bold">Entrá a tu cuenta</h2>
-            <p className="mt-1 text-sm text-acero-500">
+            <h2 className="display text-3xl font-bold tracking-tight text-caucho-950">Entrá a tu cuenta</h2>
+            <p className="mt-2 max-w-sm text-sm text-acero-500">
               Usá el correo que te dio gerencia.
             </p>
           </div>

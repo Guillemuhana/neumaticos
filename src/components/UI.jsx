@@ -21,14 +21,18 @@ export function Campo({ etiqueta, ayuda, children }) {
 
 export function Boton({ variante = 'primario', className = '', ...props }) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 ' +
-    'text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60'
+    'inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 ' +
+    'text-sm font-semibold transition duration-200 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-perez-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white'
 
   const variantes = {
-    primario: 'bg-perez-600 text-white hover:bg-perez-700 disabled:hover:bg-perez-600',
-    secundario: 'border border-acero-200 bg-white text-caucho-800 hover:bg-concreto-100',
-    fantasma: 'text-caucho-800 hover:bg-concreto-200',
-    peligro: 'border border-perez-300 bg-white text-perez-700 hover:bg-perez-50',
+    primario:
+      'bg-gradient-to-r from-perez-700 to-perez-600 text-white shadow-sm shadow-perez-900/10 hover:from-perez-800 hover:to-perez-700',
+    secundario:
+      'border border-concreto-200 bg-white text-caucho-800 hover:border-acero-300 hover:bg-concreto-100',
+    fantasma:
+      'text-caucho-800 hover:bg-concreto-100 focus-visible:ring-perez-500/30',
+    peligro:
+      'border border-perez-300 bg-white text-perez-700 hover:bg-perez-50',
   }
 
   return <button className={`${base} ${variantes[variante]} ${className}`} {...props} />
@@ -68,7 +72,7 @@ export function Cargando({ texto = 'Cargando…', alto = 'min-h-screen' }) {
 export function Tarjeta({ className = '', ...props }) {
   return (
     <div
-      className={`rounded-lg border border-concreto-200 bg-white ${className}`}
+      className={`rounded-[1.5rem] border border-concreto-200/90 bg-white/95 shadow-sm shadow-caucho-900/5 backdrop-blur-sm ${className}`}
       {...props}
     />
   )
@@ -76,12 +80,12 @@ export function Tarjeta({ className = '', ...props }) {
 
 export function Encabezado({ titulo, detalle, children }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="display text-2xl font-bold">{titulo}</h1>
-        {detalle && <p className="mt-1 text-sm text-acero-500">{detalle}</p>}
+    <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="space-y-2">
+        <h1 className="display text-3xl font-bold tracking-tight text-caucho-950">{titulo}</h1>
+        {detalle && <p className="max-w-2xl text-sm text-acero-500">{detalle}</p>}
       </div>
-      {children && <div className="flex gap-2">{children}</div>}
+      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
     </div>
   )
 }
@@ -89,14 +93,14 @@ export function Encabezado({ titulo, detalle, children }) {
 export function Metrica({ icono: Icono, titulo, valor, pie, tono = 'neutro', className = '', onClick }) {
   const tonos = {
     neutro: 'bg-concreto-100 text-caucho-700',
-    marca: 'bg-perez-50 text-perez-600',
-    atencion: 'bg-atencion-600/10 text-atencion-600',
-    conforme: 'bg-conforme-500/10 text-conforme-500',
+    marca: 'bg-perez-50 text-perez-700',
+    atencion: 'bg-atencion-100 text-atencion-700',
+    conforme: 'bg-conforme-100 text-conforme-700',
   }
 
   return (
     <Tarjeta
-      className={`p-5 ${onClick ? 'cursor-pointer hover:shadow-md' : ''} ${className}`}
+      className={`p-6 ${onClick ? 'cursor-pointer hover:shadow-md' : ''} ${className}`}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -112,17 +116,17 @@ export function Metrica({ icono: Icono, titulo, valor, pie, tono = 'neutro', cla
       }
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-medium text-acero-500">{titulo}</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-acero-500">
+          {titulo}
+        </p>
         {Icono && (
-          <span className={`rounded-md p-1.5 ${tonos[tono]}`}>
-            <Icono size={16} aria-hidden="true" />
+          <span className={`rounded-2xl p-2 ${tonos[tono]}`}>
+            <Icono size={18} aria-hidden="true" />
           </span>
         )}
       </div>
-      {/* Sin tabular-nums: a este tamaño los dígitos de ancho fijo se ven sueltos.
-          Se reserva para columnas que tienen que alinear verticalmente. */}
-      <p className="display mt-3 text-2xl font-bold">{valor}</p>
-      {pie && <p className="mt-1 text-xs text-acero-500">{pie}</p>}
+      <p className="display mt-4 text-3xl font-bold tracking-tight">{valor}</p>
+      {pie && <p className="mt-3 text-sm text-acero-500">{pie}</p>}
     </Tarjeta>
   )
 }
@@ -131,14 +135,14 @@ export function Metrica({ icono: Icono, titulo, valor, pie, tono = 'neutro', cla
 export function Etiqueta({ tono = 'neutro', children }) {
   const tonos = {
     neutro: 'bg-concreto-200 text-caucho-700',
-    marca: 'bg-perez-50 text-perez-700',
-    atencion: 'bg-atencion-600/10 text-atencion-600',
-    conforme: 'bg-conforme-500/10 text-conforme-500',
+    marca: 'bg-perez-100 text-perez-700',
+    atencion: 'bg-atencion-100 text-atencion-700',
+    conforme: 'bg-conforme-100 text-conforme-700',
   }
 
   return (
     <span
-      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${tonos[tono]}`}
+      className={`inline-flex items-center rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.15em] ${tonos[tono]}`}
     >
       {children}
     </span>
@@ -149,8 +153,8 @@ export function Etiqueta({ tono = 'neutro', children }) {
 export function Tabla({ columnas, children }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[36rem] text-sm">
-        <thead>
+      <table className="responsive-table w-full sm:min-w-[36rem] text-sm border-separate border-spacing-y-3 sm:border-spacing-y-0">
+        <thead className="hidden sm:table-header-group">
           <tr className="border-b border-concreto-200 text-left">
             {columnas.map((c) => (
               <th
@@ -162,7 +166,7 @@ export function Tabla({ columnas, children }) {
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-concreto-200">{children}</tbody>
+        <tbody className="space-y-3 sm:space-y-0 sm:table-row-group">{children}</tbody>
       </table>
     </div>
   )

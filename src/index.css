@@ -32,10 +32,17 @@
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
+  min-height: 100vh;
   font-family: var(--font-sans);
-  background: var(--color-concreto-100);
+  background: radial-gradient(circle at top left, #f8f6f4 0%, #f3f2ef 35%, #ece9e5 100%);
   color: var(--color-caucho-900);
 }
+
+::selection {
+  background: rgba(179, 38, 44, 0.18);
+  color: var(--color-caucho-950);
+}
+
 h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.015em; }
 
 /* Cinta diagonal: retoma el listón del logo. Único gesto decorativo. */
@@ -54,4 +61,51 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.015e
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Tablas responsivas: filas tipo tarjeta para dispositivos móviles */
+@media (max-width: 639px) {
+  .responsive-table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .responsive-table thead,
+  .responsive-table thead tr {
+    display: none;
+  }
+
+  .responsive-table tbody,
+  .responsive-table tr,
+  .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .responsive-table tr {
+    margin-bottom: 1rem;
+    border: 1px solid var(--color-concreto-200);
+    border-radius: 1rem;
+    background: white;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  }
+
+  .responsive-table td {
+    padding: 1rem;
+    border: none;
+  }
+
+  .responsive-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-acero-500);
+  }
+
+  .responsive-table td:last-child {
+    padding-bottom: 1.25rem;
+  }
 }
