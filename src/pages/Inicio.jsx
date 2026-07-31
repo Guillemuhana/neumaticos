@@ -1,50 +1,117 @@
+import { AlertTriangle, ClipboardList, Package, Receipt, TrendingUp } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthProvider'
-import { Boton } from '../components/UI'
+import { useConsulta } from '../hooks/useConsulta'
+import { supabase } from '../lib/supabase'
+import { plata } from '../lib/formato'
+import { Aviso, Cargando, Encabezado, Metrica, Tarjeta } from '../components/UI'
 
-/* Los módulos todavía no existen: esto es el esqueleto navegable. */
-const modulos = [
-  { titulo: 'Stock', detalle: 'Neumáticos, llantas y repuestos en tiempo real' },
-  { titulo: 'Ventas', detalle: 'Comprobantes y cotizaciones' },
-  { titulo: 'Taller', detalle: 'Órdenes de trabajo y turnos' },
-  { titulo: 'Personal', detalle: 'Legajos, asistencia y comisiones' },
-]
+const inicioDelDia = () => {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.toISOString()
+}
 
 export default function Inicio() {
-  const { sesion, cerrarSesion } = useAuth()
+  const navigate = useNavigate()
+  const { perfil, rol } = useAuth()
+
+  const { datos, cargando, error } = useConsulta(async () => {
+    const desde = inicioDelDia()
+
+    const [ventas, bajoStock, ordenes] = await Promise.all([
+      supabase
+        .from('ventas')
+        .select('total, estado, creada_en')
+        .eq('estado', 'confirmada')
+        .gte('creada_en', desde),
+      supabase.from('productos').select('id, marca, medida, stock, stock_minimo').eq('activo', true),
+      supabase.from('ordenes').select('id, estado'),
+    ])
+
+    const primerError = ventas.error || bajoStock.error || ordenes.error
+    if (primerError) return { error: primerError }
+
+    return {
+      data: {
+        ventasHoy: ventas.data,
+        criticos: bajoStock.data.filter((p) => p.stock <= p.stock_minimo),
+        ordenes: ordenes.data,
+      },
+    }
+  }, [])
+
+  if (cargando) return <Cargando texto="Armando el panel…" alto="min-h-[60vh]" />
+  if (error) return <Aviso>{error}</Aviso>
+
+  const facturado = datos.ventasHoy.reduce((a, v) => a + Number(v.total), 0)
+  const abiertas = datos.ordenes.filter((o) => o.estado === 'pendiente' || o.estado === 'en_proceso')
 
   return (
-    <div className="min-h-screen">
-      <header className="relative border-b border-concreto-200 bg-white">
-        <span className="franja absolute inset-x-0 top-0 h-1" aria-hidden="true" />
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
-          <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-32" />
-          <div className="flex items-center gap-4">
-            <span className="hidden font-mono text-sm text-acero-500 sm:inline">
-              {sesion?.user?.email}
-            </span>
-            <Boton variante="secundario" onClick={cerrarSesion}>
-              Salir
-            </Boton>
+    <>
+      <Encabezado
+        titulo={`Hola, ${perfil?.nombre?.split(' ')[0] ?? ''}`}
+        detalle="Lo que está pasando hoy en el local."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metrica
+          icono={Receipt}
+          tono="marca"
+          titulo="Facturado hoy"
+          valor={plata(facturado)}
+          pie={`${datos.ventasHoy.length} venta(s) confirmada(s)`}
+          onClick={() => navigate('/ventas')}
+          className="cursor-pointer"
+        />
+        <Metrica
+          icono={ClipboardList}
+          titulo="Órdenes abiertas"
+          valor={abiertas.length}
+          pie="Pendientes o en proceso"
+          onClick={() => navigate('/taller')}
+          className="cursor-pointer"
+        />
+        <Metrica
+          icono={Package}
+          titulo="Órdenes terminadas"
+          valor={datos.ordenes.filter((o) => o.estado === 'terminada').length}
+          tono="conforme"
+          pie="Listas para entregar"
+          onClick={() => navigate('/taller')}
+          className="cursor-pointer"
+        />
+        <Metrica
+          icono={AlertTriangle}
+          tono={datos.criticos.length ? 'atencion' : 'neutro'}
+          titulo="Stock crítico"
+          valor={datos.criticos.length}
+          pie="Artículos en el mínimo o debajo"
+          onClick={() => navigate('/stock')}
+          className="cursor-pointer"
+        />
+      </div>
+
+      {datos.criticos.length > 0 && rol !== 'mecanico' && (
+        <Tarjeta className="mt-6 p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <TrendingUp size={18} className="text-atencion-600" aria-hidden="true" />
+            <h2 className="display font-bold">Hay que reponer</h2>
           </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="display text-2xl font-bold">Panel de gestión</h1>
-        <p className="mt-1 text-sm text-acero-500">Elegí por dónde arrancar.</p>
-
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          {modulos.map((m) => (
-            <article
-              key={m.titulo}
-              className="rounded-lg border border-concreto-200 bg-white p-5"
-            >
-              <h2 className="display text-lg font-bold">{m.titulo}</h2>
-              <p className="mt-1 text-sm text-acero-500">{m.detalle}</p>
-            </article>
-          ))}
-        </div>
-      </main>
-    </div>
+          <ul className="divide-y divide-concreto-200">
+            {datos.criticos.slice(0, 6).map((p) => (
+              <li key={p.id} className="flex items-center justify-between py-2 text-sm">
+                <span>
+                  {p.marca} <span className="font-mono text-acero-500">{p.medida}</span>
+                </span>
+                <span className="font-mono font-semibold text-atencion-600">
+                  {p.stock} / mín {p.stock_minimo}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Tarjeta>
+      )}
+    </>
   )
 }

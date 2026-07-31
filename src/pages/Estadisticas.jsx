@@ -1,0 +1,198 @@
+import { useState } from 'react'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as TooltipRecharts,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { Boxes, ClipboardList, Receipt, Wallet } from 'lucide-react'
+import { eachDayOfInterval, format, startOfDay, subDays } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { useConsulta } from '../hooks/useConsulta'
+import { supabase } from '../lib/supabase'
+import { numero, plata } from '../lib/formato'
+import { Aviso, Cargando, Encabezado, Metrica } from '../components/UI'
+import { MARCA, PanelGrafico, Tooltip, ejeComun } from '../components/Grafico'
+
+const periodos = [
+  { dias: 7, texto: '7 días' },
+  { dias: 30, texto: '30 días' },
+  { dias: 90, texto: '90 días' },
+]
+
+export default function Estadisticas() {
+  const [dias, setDias] = useState(30)
+
+  const { datos, cargando, error } = useConsulta(async () => {
+    const desde = startOfDay(subDays(new Date(), dias - 1)).toISOString()
+
+    const [ventas, ordenes, productos] = await Promise.all([
+      supabase
+        .from('ventas')
+        .select('total, creada_en, perfiles(nombre)')
+        .eq('estado', 'confirmada')
+        .gte('creada_en', desde),
+      supabase.from('ordenes').select('estado, creada_en, perfiles(nombre)').gte('creada_en', desde),
+      supabase.from('productos').select('stock, costo').eq('activo', true),
+    ])
+
+    const fallo = ventas.error || ordenes.error || productos.error
+    if (fallo) return { error: fallo }
+
+    return { data: { ventas: ventas.data, ordenes: ordenes.data, productos: productos.data } }
+  }, [dias])
+
+  if (cargando) return <Cargando texto="Calculando…" alto="min-h-[60vh]" />
+  if (error) return <Aviso>{error}</Aviso>
+
+  const { ventas, ordenes, productos } = datos
+
+  const facturado = ventas.reduce((a, v) => a + Number(v.total), 0)
+  const ticket = ventas.length ? facturado / ventas.length : 0
+  const inventario = productos.reduce((a, p) => a + p.stock * Number(p.costo), 0)
+  const entregadas = ordenes.filter((o) => o.estado === 'entregada').length
+
+  /* Serie diaria completa, con los días sin ventas en cero: si se saltaran,
+     el eje mentiría sobre el ritmo de facturación. */
+  const porDia = eachDayOfInterval({
+    start: startOfDay(subDays(new Date(), dias - 1)),
+    end: new Date(),
+  }).map((d) => {
+    const clave = format(d, 'yyyy-MM-dd')
+    const total = ventas
+      .filter((v) => format(new Date(v.creada_en), 'yyyy-MM-dd') === clave)
+      .reduce((a, v) => a + Number(v.total), 0)
+    return { dia: format(d, 'd MMM', { locale: es }), total }
+  })
+
+  const agrupar = (filas, obtener) => {
+    const mapa = new Map()
+    filas.forEach((f) => {
+      const clave = obtener(f) ?? 'Sin asignar'
+      mapa.set(clave, (mapa.get(clave) ?? 0) + 1)
+    })
+    return [...mapa.entries()].map(([nombre, cantidad]) => ({ nombre, cantidad }))
+  }
+
+  const porVendedor = (() => {
+    const mapa = new Map()
+    ventas.forEach((v) => {
+      const nombre = v.perfiles?.nombre ?? 'Sin asignar'
+      mapa.set(nombre, (mapa.get(nombre) ?? 0) + Number(v.total))
+    })
+    return [...mapa.entries()]
+      .map(([nombre, total]) => ({ nombre, total }))
+      .sort((a, b) => b.total - a.total)
+  })()
+
+  const porMecanico = agrupar(ordenes, (o) => o.perfiles?.nombre).sort(
+    (a, b) => b.cantidad - a.cantidad
+  )
+
+  return (
+    <>
+      <Encabezado titulo="Estadísticas" detalle="Rendimiento del local para decidir con datos." />
+
+      {/* Un solo filtro arriba: alcanza a todos los gráficos de la vista. */}
+      <div className="mb-6 flex gap-1 rounded-md border border-concreto-200 bg-white p-1 w-fit">
+        {periodos.map((p) => (
+          <button
+            key={p.dias}
+            onClick={() => setDias(p.dias)}
+            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+              dias === p.dias
+                ? 'bg-perez-600 text-white'
+                : 'text-acero-500 hover:bg-concreto-100 hover:text-caucho-800'
+            }`}
+          >
+            {p.texto}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metrica icono={Receipt} tono="marca" titulo="Facturado" valor={plata(facturado)} pie={`${ventas.length} ventas confirmadas`} />
+        <Metrica icono={Wallet} titulo="Ticket promedio" valor={plata(ticket)} pie="Por venta confirmada" />
+        <Metrica icono={ClipboardList} tono="conforme" titulo="Órdenes entregadas" valor={numero(entregadas)} pie={`De ${ordenes.length} creadas`} />
+        <Metrica icono={Boxes} titulo="Valor de inventario" valor={plata(inventario)} pie="Stock actual a costo" />
+      </div>
+
+      <div className="mt-6 grid gap-4 xl:grid-cols-2">
+        <div className="xl:col-span-2">
+          <PanelGrafico
+            titulo="Facturación por día"
+            detalle="Ventas confirmadas, en pesos."
+            datos={porDia}
+            columnas={['Día', 'Facturado']}
+            filas={porDia.map((d) => [d.dia, plata(d.total)])}
+          >
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={porDia} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+                <CartesianGrid stroke="#E5E7E2" vertical={false} />
+                <XAxis dataKey="dia" {...ejeComun} interval="preserveStartEnd" minTickGap={24} />
+                <YAxis {...ejeComun} width={64} tickFormatter={(v) => numero(v)} />
+                <TooltipRecharts
+                  cursor={{ stroke: '#AEB6C0' }}
+                  content={<Tooltip formato={plata} />}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  stroke={MARCA}
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  fill={MARCA}
+                  fillOpacity={0.1}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: '#fff' }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </PanelGrafico>
+        </div>
+
+        <PanelGrafico
+          titulo="Ventas por vendedor"
+          detalle="Facturación acumulada en el período."
+          datos={porVendedor}
+          columnas={['Vendedor', 'Facturado']}
+          filas={porVendedor.map((v) => [v.nombre, plata(v.total)])}
+        >
+          <ResponsiveContainer width="100%" height={Math.max(200, porVendedor.length * 48)}>
+            <BarChart data={porVendedor} layout="vertical" margin={{ top: 4, right: 16, bottom: 0, left: 8 }}>
+              <CartesianGrid stroke="#E5E7E2" horizontal={false} />
+              <XAxis type="number" {...ejeComun} tickFormatter={(v) => numero(v)} />
+              <YAxis type="category" dataKey="nombre" {...ejeComun} width={110} />
+              <TooltipRecharts cursor={{ fill: '#F2F3F0' }} content={<Tooltip formato={plata} />} />
+              <Bar dataKey="total" fill={MARCA} barSize={24} radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </PanelGrafico>
+
+        <PanelGrafico
+          titulo="Productividad del taller"
+          detalle="Órdenes tomadas por mecánico."
+          datos={porMecanico}
+          columnas={['Mecánico', 'Órdenes']}
+          filas={porMecanico.map((m) => [m.nombre, numero(m.cantidad)])}
+        >
+          <ResponsiveContainer width="100%" height={Math.max(200, porMecanico.length * 48)}>
+            <BarChart data={porMecanico} layout="vertical" margin={{ top: 4, right: 16, bottom: 0, left: 8 }}>
+              <CartesianGrid stroke="#E5E7E2" horizontal={false} />
+              <XAxis type="number" {...ejeComun} allowDecimals={false} />
+              <YAxis type="category" dataKey="nombre" {...ejeComun} width={110} />
+              <TooltipRecharts cursor={{ fill: '#F2F3F0' }} content={<Tooltip formato={numero} />} />
+              <Bar dataKey="cantidad" fill={MARCA} barSize={24} radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </PanelGrafico>
+      </div>
+    </>
+  )
+}

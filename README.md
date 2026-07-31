@@ -10,6 +10,15 @@ Stack: React 19 + Vite, React Router, Tailwind CSS v4 y Supabase (auth).
 ```bash
 npm install
 cp .env.example .env   # completar con el proyecto de Supabase
+# Agregar también estas variables para crear el usuario admin:
+# VITE_SUPABASE_URL=https://<project>.supabase.co
+# VITE_SUPABASE_ANON_KEY=<anon-key>                 # clave anon real necesaria para login
+# SUPABASE_URL=https://<project>.supabase.co
+# SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+# ADMIN_EMAIL=admin@dominio.com
+# ADMIN_PASSWORD=ContraseñaSegura123
+# ADMIN_NOMBRE=Administrador
+npm run create-admin
 npm run dev
 ```
 
