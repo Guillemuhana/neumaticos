@@ -34,10 +34,13 @@ export default function Estadisticas() {
     const [ventas, ordenes, productos, ventasDetalle] = await Promise.all([
       supabase
         .from('ventas')
-        .select('total, creada_en, perfiles(nombre)')
+        .select('id, total, creada_en, estado, vendedor_id, perfiles(nombre)')
         .eq('estado', 'confirmada')
         .gte('creada_en', desde),
-      supabase.from('ordenes').select('estado, creada_en, perfiles(nombre)').gte('creada_en', desde),
+      supabase
+        .from('ordenes')
+        .select('id, vehiculo, patente, servicios, estado, notas, creada_en, perfiles(nombre)')
+        .gte('creada_en', desde),
       supabase.from('productos').select('stock, costo, categoria').eq('activo', true),
       supabase
         .from('venta_items')
@@ -98,6 +101,10 @@ export default function Estadisticas() {
   const entregadas = ordenes.filter((o) => o.estado === 'entregada').length
   const unidadesVendidas = datos.ventasDetalle.reduce((a, item) => a + item.cantidad, 0)
   const articlesPorVenta = ventas.length ? unidadesVendidas / ventas.length : 0
+
+  const hoy = format(new Date(), 'yyyy-MM-dd')
+  const ventasHoy = ventas.filter((v) => format(new Date(v.creada_en), 'yyyy-MM-dd') === hoy)
+  const ordenesHoy = ordenes.filter((o) => format(new Date(o.creada_en), 'yyyy-MM-dd') === hoy)
 
   /* Serie diaria completa, con los días sin ventas en cero: si se saltaran,
      el eje mentiría sobre el ritmo de facturación. */
@@ -167,12 +174,29 @@ export default function Estadisticas() {
       ['Facturado', plata(facturado)],
       ['Ticket promedio', plata(ticket)],
       ['Ventas confirmadas', numero(ventas.length)],
+      ['Ventas hoy', numero(ventasHoy.length)],
+      ['Trabajos hoy', numero(ordenesHoy.length)],
       ['Unidades vendidas', numero(unidadesVendidas)],
       ['Artículos por venta', numero(articlesPorVenta.toFixed(2))],
       ['Órdenes entregadas', numero(entregadas)],
       ['Valor de inventario', plata(inventario)],
       ['Inventario cubiertas', plata(inventarioCubiertas)],
       ['Inventario repuestos', plata(inventarioRepuestos)],
+      [],
+      ['Ventas del día'],
+      ['Venta', 'Vendedor', 'Estado', 'Total', 'Hora'],
+      ...ventasHoy.map((v) => [v.id ?? '—', v.perfiles?.nombre ?? '—', v.estado, plata(v.total), format(new Date(v.creada_en), 'HH:mm')]),
+      [],
+      ['Trabajos de taller del día'],
+      ['Orden', 'Vehículo', 'Patente', 'Mecánico', 'Estado', 'Servicios'],
+      ...ordenesHoy.map((o) => [
+        o.id ?? '—',
+        o.vehiculo || '—',
+        o.patente || '—',
+        o.perfiles?.nombre || 'Sin asignar',
+        o.estado,
+        (o.servicios || []).join(', '),
+      ]),
       [],
       ['Ventas por vendedor'],
       ['Vendedor', 'Facturado'],
@@ -207,7 +231,7 @@ export default function Estadisticas() {
   }
 
   const compartirReporte = async () => {
-    const texto = `Reporte de gestión:\nFacturado: ${plata(facturado)}\nTicket promedio: ${plata(ticket)}\nÓrdenes entregadas: ${numero(entregadas)}\nValor de inventario: ${plata(inventario)}`
+    const texto = `Reporte de gestión:\nFacturado: ${plata(facturado)}\nTicket promedio: ${plata(ticket)}\nVentas hoy: ${numero(ventasHoy.length)}\nTrabajos hoy: ${numero(ordenesHoy.length)}\nÓrdenes entregadas: ${numero(entregadas)}\nValor de inventario: ${plata(inventario)}`
 
     if (navigator.share) {
       await navigator.share({
@@ -253,6 +277,8 @@ export default function Estadisticas() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metrica icono={Receipt} tono="marca" titulo="Facturado" valor={plata(facturado)} pie={`${ventas.length} ventas confirmadas`} />
         <Metrica icono={Wallet} titulo="Ticket promedio" valor={plata(ticket)} pie="Por venta confirmada" />
+        <Metrica icono={Receipt} titulo="Ventas hoy" valor={numero(ventasHoy.length)} pie="Ventas confirmadas en el día" />
+        <Metrica icono={ClipboardList} tono="conforme" titulo="Trabajos hoy" valor={numero(ordenesHoy.length)} pie="Órdenes de taller del día" />
         <Metrica icono={ClipboardList} tono="conforme" titulo="Órdenes entregadas" valor={numero(entregadas)} pie={`De ${ordenes.length} creadas`} />
         <Metrica icono={Boxes} titulo="Valor de inventario" valor={plata(inventario)} pie="Stock actual a costo" />
       </div>
@@ -327,6 +353,36 @@ export default function Estadisticas() {
             </BarChart>
           </ResponsiveContainer>
         </PanelGrafico>
+      </div>
+
+      <div className="mt-6 grid gap-4 xl:grid-cols-2">
+        <PanelGrafico
+          titulo="Ventas del día"
+          detalle="Ventas confirmadas con hora y vendedor."
+          datos={ventasHoy}
+          columnas={['Venta', 'Vendedor', 'Estado', 'Total', 'Hora']}
+          filas={ventasHoy.map((v) => [
+            v.id ?? '—',
+            v.perfiles?.nombre ?? '—',
+            v.estado,
+            plata(v.total),
+            format(new Date(v.creada_en), 'HH:mm'),
+          ])}
+        />
+
+        <PanelGrafico
+          titulo="Trabajos del taller hoy"
+          detalle="Órdenes del día con vehículo, mecánico y estado."
+          datos={ordenesHoy}
+          columnas={['Orden', 'Vehículo', 'Patente', 'Mecánico', 'Estado']}
+          filas={ordenesHoy.map((o) => [
+            o.id ?? '—',
+            o.vehiculo || '—',
+            o.patente || '—',
+            o.perfiles?.nombre || 'Sin asignar',
+            o.estado,
+          ])}
+        />
       </div>
     </>
   )

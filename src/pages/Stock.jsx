@@ -3,7 +3,7 @@ import { Boxes, Plus, Search } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
-import { plata } from '../lib/formato'
+import { numero, plata } from '../lib/formato'
 import {
   Aviso,
   Boton,
@@ -90,108 +90,165 @@ export default function Stock() {
         )}
       </Encabezado>
 
-      <div className="relative mb-4">
-        <Search
-          size={16}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-acero-500"
-          aria-hidden="true"
-        />
-        <input
-          className={`${estiloInput} pl-9`}
-          placeholder="Buscar por categoría, marca, medida, precio o código…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
-      </div>
-
-      {error && <Aviso>{error}</Aviso>}
-
-      {cargando ? (
-        <Tarjeta>
-          <Cargando texto="Leyendo inventario…" alto="min-h-[40vh]" />
-        </Tarjeta>
-      ) : filtrados.length === 0 ? (
-        <Tarjeta>
-          <Vacio
-            icono={Boxes}
-            titulo="No hay artículos"
-            detalle={busqueda ? 'Probá con otra búsqueda.' : 'Cargá el primer artículo del inventario.'}
-          />
-        </Tarjeta>
-      ) : (
-        Object.keys(productosPorCategoria)
-          .sort((a, b) => {
-            const indexA = CATEGORIAS.indexOf(a)
-            const indexB = CATEGORIAS.indexOf(b)
-            if (indexA === -1 && indexB === -1) return a.localeCompare(b)
-            if (indexA === -1) return 1
-            if (indexB === -1) return -1
-            return indexA - indexB
-          })
-          .map((categoria) => (
-            <Tarjeta key={categoria} className="mb-4">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-acero-500">{categoria}</p>
-                  <p className="mt-1 text-sm text-acero-500">{productosPorCategoria[categoria].length} artículo(s)</p>
-                </div>
+      <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="relative">
+          <div className="sticky top-24 space-y-4 rounded-[1.5rem] border border-concreto-200 bg-white p-5 shadow-sm shadow-caucho-900/5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-acero-500">Categorías</p>
+                <p className="mt-1 text-sm text-acero-500">Filtrá rápido por tipo de producto.</p>
               </div>
-              <Tabla columnas={['Artículo', 'Medida', 'Precio', 'Stock', ...(gestiona ? [''] : [])]}>
-                {productosPorCategoria[categoria].map((p) => {
-                  const critico = p.stock <= p.stock_minimo
-                  return (
-                    <tr
-                      key={p.id}
-                      className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none"
-                    >
-                      <td data-label="Artículo" className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          {p.imagen_url ? (
-                            <img
-                              src={p.imagen_url}
-                              alt={p.marca}
-                              className="h-16 w-16 rounded-xl object-cover border border-concreto-200"
-                            />
-                          ) : (
-                            <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-concreto-200 bg-concreto-50 text-xs uppercase text-acero-500">
-                              Sin foto
-                            </div>
-                          )}
-                          <div>
-                            <p className="font-medium">{p.marca}</p>
-                            <p className="text-sm text-acero-500">{p.descripcion || 'Repuesto profesional'}</p>
-                            {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
-                          </div>
-                        </div>
-                      </td>
-                      <td data-label="Medida" className="px-4 py-3 font-mono">
-                        {p.medida}
-                      </td>
-                      <td data-label="Precio" className="px-4 py-3 tabular-nums">
-                        {plata(p.precio)}
-                      </td>
-                      <td data-label="Stock" className="px-4 py-3">
-                        <span className="mr-2 font-mono font-semibold tabular-nums">{p.stock}</span>
-                        {critico && <Etiqueta tono="atencion">reponer</Etiqueta>}
-                      </td>
-                      {gestiona && (
-                        <td data-label="Acciones" className="px-4 py-3 text-right">
-                          <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(p)}>
-                            Editar
-                          </Boton>
-                        </td>
-                      )}
-                    </tr>
-                  )
-                })}
-              </Tabla>
+              <Boxes size={20} className="text-perez-600" />
+            </div>
+
+          <div className="space-y-2">
+            {CATEGORIAS.map((categoria) => {
+              const total = productosPorCategoria[categoria]?.length || 0
+              const activa = categoria.toLowerCase().includes(busqueda.trim().toLowerCase())
+              return (
+                <button
+                  key={categoria}
+                  type="button"
+                  onClick={() => setBusqueda(categoria)}
+                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                    total > 0
+                      ? 'border-concreto-200 bg-white text-caucho-900 hover:border-perez-300'
+                      : 'border-concreto-100 bg-concreto-50 text-acero-400 cursor-not-allowed'
+                  } ${activa ? 'border-perez-500 bg-perez-50 text-perez-700' : ''}`}
+                  disabled={total === 0}
+                >
+                  <span>{categoria}</span>
+                  <span className="rounded-full bg-concreto-100 px-2 py-0.5 text-xs font-semibold text-acero-500">
+                    {numero(total)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="rounded-2xl border border-concreto-200 bg-concreto-50 px-4 py-4 text-sm text-acero-500">
+            <p className="font-semibold text-caucho-900">Vista de inventario</p>
+            <p className="mt-2 text-sm leading-6">
+              Usá la búsqueda para encontrar rápido por categoría, marca, medida, precio o código.
+            </p>
+          </div>
+        </aside>
+
+        <section>
+          <div className="relative mb-4">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-acero-500"
+              aria-hidden="true"
+            />
+            <input
+              className={`${estiloInput} pl-9`}
+              placeholder="Buscar por categoría, marca, medida, precio o código…"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+          </div>
+
+          {error && <Aviso>{error}</Aviso>}
+
+          {cargando ? (
+            <Tarjeta>
+              <Cargando texto="Leyendo inventario…" alto="min-h-[40vh]" />
             </Tarjeta>
-          ))
-      )}
+          ) : filtrados.length === 0 ? (
+            <Tarjeta>
+              <Vacio
+                icono={Boxes}
+                titulo="No hay artículos"
+                detalle={busqueda ? 'Probá con otra búsqueda.' : 'Cargá el primer artículo del inventario.'}
+              />
+            </Tarjeta>
+          ) : (
+            Object.keys(productosPorCategoria)
+              .sort((a, b) => {
+                const indexA = CATEGORIAS.indexOf(a)
+                const indexB = CATEGORIAS.indexOf(b)
+                if (indexA === -1 && indexB === -1) return a.localeCompare(b)
+                if (indexA === -1) return 1
+                if (indexB === -1) return -1
+                return indexA - indexB
+              })
+              .map((categoria) => (
+                <Tarjeta key={categoria} className="mb-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-acero-500">{categoria}</p>
+                      <p className="mt-1 text-sm text-acero-500">{productosPorCategoria[categoria].length} artículo(s)</p>
+                    </div>
+                    <span className="rounded-full bg-concreto-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-acero-500">
+                      {numero(productosPorCategoria[categoria].length)} en stock
+                    </span>
+                  </div>
+                  <Tabla columnas={['Artículo', 'Medida', 'Precio', 'Stock', ...(gestiona ? [''] : [])]}>
+                    {productosPorCategoria[categoria].map((p) => {
+                      const critico = p.stock <= p.stock_minimo
+                      return (
+                        <tr
+                          key={p.id}
+                          className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none"
+                        >
+                          <td data-label="Artículo" className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              {p.imagen_url ? (
+                                <img
+                                  src={p.imagen_url}
+                                  alt={p.marca}
+                                  className="h-16 w-16 rounded-xl object-cover border border-concreto-200"
+                                />
+                              ) : (
+                                <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-concreto-200 bg-concreto-50 text-xs uppercase text-acero-500">
+                                  Sin foto
+                                </div>
+                              )}
+                              <div>
+                                <p className="font-medium">{p.marca}</p>
+                                <p className="text-sm text-acero-500">{p.descripcion || 'Repuesto profesional'}</p>
+                                {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td data-label="Medida" className="px-4 py-3 font-mono">
+                            {p.medida}
+                          </td>
+                          <td data-label="Precio" className="px-4 py-3 tabular-nums">
+                            {plata(p.precio)}
+                          </td>
+                          <td data-label="Stock" className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-semibold tabular-nums">{p.stock}</span>
+                              {critico ? (
+                                <Etiqueta tono="atencion">reponer</Etiqueta>
+                              ) : (
+                                <Etiqueta tono="conforme">OK</Etiqueta>
+                              )}
+                            </div>
+                          </td>
+                          {gestiona && (
+                            <td data-label="Acciones" className="px-4 py-3 text-right">
+                              <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(p)}>
+                                Editar
+                              </Boton>
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
+                  </Tabla>
+                </Tarjeta>
+              ))
+          )}
+        </section>
+      </div>
 
       {editando && (
         <FormularioProducto
           producto={editando}
+          gestiona={gestiona}
           onCerrar={() => setEditando(null)}
           onGuardado={() => {
             setEditando(null)
@@ -203,7 +260,7 @@ export default function Stock() {
   )
 }
 
-function FormularioProducto({ producto, onCerrar, onGuardado }) {
+function FormularioProducto({ producto, onCerrar, onGuardado, gestiona }) {
   const [form, setForm] = useState(producto)
   const [imagenFile, setImagenFile] = useState(null)
   const [imagenPreview, setImagenPreview] = useState(producto.imagen_url || '')
@@ -287,10 +344,12 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
           ? 'No tenés permisos para crear o editar productos. Verificá que tu usuario tenga rol gerencia en Supabase.'
           : error.message
         setError(mensaje)
-        setGuardando(false)
-      } else onGuardado()
+      } else {
+        onGuardado()
+      }
     } catch (err) {
       setError(err.message ?? 'Error subiendo la imagen')
+    } finally {
       setGuardando(false)
     }
   }

@@ -1,5 +1,5 @@
 import { LogIn, LogOut, Users } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
@@ -40,7 +40,7 @@ export default function Personal() {
       puede('gerencia')
         ? supabase
             .from('perfiles')
-            .select('id, nombre, rol, activo, telefono, email, documento, creado_en')
+            .select('*')
             .order('creado_en', { ascending: false })
         : Promise.resolve({ data: [] }),
     [puede]
@@ -88,6 +88,7 @@ export default function Personal() {
       telefono: empleado.telefono?.trim() || null,
       documento: empleado.documento?.trim() || null,
       email: empleado.email?.trim() || null,
+      imagen_url: empleado.imagen_url?.trim() || null,
       activo: empleado.activo,
     }
 
@@ -95,7 +96,14 @@ export default function Personal() {
     if (!datosEmpleado.email) return 'El email es obligatorio.'
     if (!['vendedor', 'mecanico', 'gerencia'].includes(datosEmpleado.rol)) return 'Rol inválido.'
 
-    if (!empleado.id) {
+    const actualizarPerfil = async (fila, id) => {
+      const { error } = await supabase.from('perfiles').update(fila).eq('id', id)
+      if (error && error.message.includes('column "telefono" does not exist')) {
+        const fallback = { ...fila }
+        delete fallback.telefono
+        delete fallback.email
+        delete fallback.documento
+        delete fallback.imagen_url
       if (!empleado.password) return 'La contraseña es obligatoria para un nuevo empleado.'
       const { data, error } = await supabase.auth.signUp(
         {
@@ -114,15 +122,12 @@ export default function Personal() {
       if (error) return error.message
       const userId = data.user?.id || data?.id
       if (!userId) return 'No se pudo crear el usuario.'
-      const { error: perfilError } = await supabase
-        .from('perfiles')
-        .update(datosEmpleado)
-        .eq('id', userId)
+      const perfilError = await actualizarPerfil(datosEmpleado, userId)
       if (perfilError) return perfilError.message
       return null
     }
 
-    const { error } = await supabase.from('perfiles').update(datosEmpleado).eq('id', empleado.id)
+    const error = await actualizarPerfil(datosEmpleado, empleado.id)
     if (error) return error.message
     return null
   }
@@ -179,6 +184,7 @@ export default function Personal() {
                   telefono: '',
                   email: '',
                   documento: '',
+                  imagen_url: '',
                   rol: 'vendedor',
                   activo: true,
                   password: '',
@@ -214,8 +220,24 @@ export default function Personal() {
                     key={empleado.id}
                     className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none"
                   >
-                    <td data-label="Nombre" className="px-4 py-3 font-medium">
-                      {empleado.nombre}
+                    <td data-label="Nombre" className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {empleado.imagen_url ? (
+                          <img
+                            src={empleado.imagen_url}
+                            alt={empleado.nombre}
+                            className="h-12 w-12 rounded-full object-cover border border-concreto-200"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-concreto-200 bg-concreto-50 text-xs uppercase text-acero-500">
+                            {empleado.nombre?.charAt(0) || '?'}
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-medium">{empleado.nombre}</p>
+                          <p className="text-xs uppercase text-acero-500">{empleado.rol}</p>
+                        </div>
+                      </div>
                     </td>
                     <td data-label="Rol" className="px-4 py-3 text-acero-500">
                       {empleado.rol}
@@ -241,7 +263,7 @@ export default function Personal() {
                         </Boton>
                         <Boton
                           variante="fantasma"
-                          className="px-2 py-1"
+                          className="px-4 py-1"
                           onClick={() => cambiarActivo(empleado)}
                         >
                           {empleado.activo ? 'Desactivar' : 'Activar'}
@@ -286,5 +308,139 @@ export default function Personal() {
         )}
       </Tarjeta>
     </>
+  )
+}
+
+function FormularioEmpleado({ empleado, onCerrar, onGuardado, guardarEmpleado }) {
+  const [form, setForm] = useState(empleado)
+  const [imagenFile, setImagenFile] = useState(null)
+  const [imagenPreview, setImagenPreview] = useState(empleado.imagen_url || '')
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    setForm(empleado)
+    setImagenPreview(empleado.imagen_url || '')
+    setImagenFile(null)
+  }, [empleado])
+
+  const campo = (k) => ({
+    value: form[k] ?? '',
+    onChange: (e) => setForm({ ...form, [k]: e.target.value }),
+  })
+
+  const subirImagen = async () => {
+    if (!imagenFile) return form.imagen_url?.trim() || null
+
+    const nombre = `empleados/${Date.now()}_${imagenFile.name}`
+    let upload = await supabase.storage.from('empleados').upload(nombre, imagenFile, {
+      cacheControl: '3600',
+      upsert: true,
+    })
+
+    if (upload.error && upload.error.message?.includes('bucket') ) {
+      upload = await supabase.storage.from('productos').upload(nombre, imagenFile, {
+        cacheControl: '3600',
+        upsert: true,
+      })
+    }
+
+    if (upload.error) throw upload.error
+
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from(upload.data?.bucket || 'empleados')
+      .getPublicUrl(nombre)
+
+    if (urlError) throw urlError
+    return urlData.publicUrl
+  }
+
+  const guardar = async (e) => {
+    e.preventDefault()
+    setGuardando(true)
+    setError('')
+
+    try {
+      const imagen_url = await subirImagen()
+      const resultado = await guardarEmpleado({ ...form, imagen_url })
+      if (resultado) {
+        setError(resultado)
+        return
+      }
+      onGuardado()
+    } catch (err) {
+      setError(err.message ?? 'Error subiendo la imagen')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Modal titulo={form.id ? 'Editar empleado' : 'Nuevo empleado'} onCerrar={onCerrar}>
+      <form onSubmit={guardar} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo etiqueta="Nombre">
+            <input required className={estiloInput} {...campo('nombre')} />
+          </Campo>
+          <Campo etiqueta="Rol">
+            <select required className={estiloInput} {...campo('rol')}>
+              <option value="vendedor">Vendedor</option>
+              <option value="mecanico">Mecánico</option>
+              <option value="gerencia">Gerencia</option>
+            </select>
+          </Campo>
+          <Campo etiqueta="Email">
+            <input type="email" className={estiloInput} {...campo('email')} />
+          </Campo>
+          <Campo etiqueta="Teléfono">
+            <input className={estiloInput} {...campo('telefono')} />
+          </Campo>
+          <Campo etiqueta="Documento">
+            <input className={estiloInput} {...campo('documento')} />
+          </Campo>
+          <Campo etiqueta="Imagen" ayuda="Subí una foto del empleado desde tu equipo.">
+            <input
+              type="file"
+              accept="image/*"
+              className={estiloInput}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                setImagenFile(file)
+                setImagenPreview(URL.createObjectURL(file))
+              }}
+            />
+          </Campo>
+          {!form.id && (
+            <Campo etiqueta="Contraseña" ayuda="La contraseña es obligatoria para el nuevo usuario.">
+              <input
+                type="password"
+                className={estiloInput}
+                value={form.password ?? ''}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+              />
+            </Campo>
+          )}
+        </div>
+
+        {imagenPreview ? (
+          <div className="rounded-xl border border-concreto-200 p-4">
+            <p className="mb-2 text-sm font-medium text-caucho-800">Vista previa</p>
+            <img src={imagenPreview} alt="Preview" className="h-40 w-full rounded-xl object-cover" />
+          </div>
+        ) : null}
+
+        <Aviso>{error}</Aviso>
+
+        <div className="flex justify-end gap-2">
+          <Boton type="button" variante="secundario" onClick={onCerrar}>
+            Cancelar
+          </Boton>
+          <Boton type="submit" disabled={guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Boton>
+        </div>
+      </form>
+    </Modal>
   )
 }

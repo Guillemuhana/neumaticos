@@ -15,12 +15,14 @@ create table if not exists perfiles (
   telefono    text,
   email       text,
   documento   text,
+  imagen_url  text,
   creado_en   timestamptz not null default now()
 );
 
 alter table perfiles add column if not exists telefono text;
 alter table perfiles add column if not exists email text;
 alter table perfiles add column if not exists documento text;
+alter table perfiles add column if not exists imagen_url text;
 
 -- Alta automática del perfil cuando gerencia crea el usuario en Auth.
 -- El rol se puede pasar como metadata al invitar; si no, entra como vendedor.
