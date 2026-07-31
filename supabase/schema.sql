@@ -12,19 +12,29 @@ create table if not exists perfiles (
   nombre      text not null default '',
   rol         rol_usuario not null default 'vendedor',
   activo      boolean not null default true,
+  telefono    text,
+  email       text,
+  documento   text,
   creado_en   timestamptz not null default now()
 );
+
+alter table perfiles add column if not exists telefono text;
+alter table perfiles add column if not exists email text;
+alter table perfiles add column if not exists documento text;
 
 -- Alta automática del perfil cuando gerencia crea el usuario en Auth.
 -- El rol se puede pasar como metadata al invitar; si no, entra como vendedor.
 create or replace function public.crear_perfil()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into perfiles (id, nombre, rol)
+  insert into perfiles (id, nombre, rol, email, telefono, documento)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'nombre', split_part(new.email, '@', 1)),
-    coalesce((new.raw_user_meta_data ->> 'rol')::rol_usuario, 'vendedor')
+    coalesce((new.raw_user_meta_data ->> 'rol')::rol_usuario, 'vendedor'),
+    new.email,
+    new.raw_user_meta_data ->> 'telefono',
+    new.raw_user_meta_data ->> 'documento'
   )
   on conflict (id) do nothing;
   return new;
@@ -74,6 +84,7 @@ create table if not exists productos (
   creado_en     timestamptz not null default now()
 );
 
+alter table productos add column if not exists categoria text not null default 'Cubierta';
 create index if not exists productos_categoria_idx on productos (categoria);
 create index if not exists productos_marca_idx on productos (marca);
 create index if not exists productos_medida_idx on productos (medida);

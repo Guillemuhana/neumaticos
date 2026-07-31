@@ -18,6 +18,19 @@ import {
   estiloInput,
 } from '../components/UI'
 
+const CATEGORIAS = [
+  'Cubierta',
+  'Amortiguador',
+  'Rótula',
+  'Filtro de aceite',
+  'Filtro de aire',
+  'Pastilla de freno',
+  'Aceite',
+  'Bujía',
+  'Correa',
+  'Otro repuesto',
+]
+
 const vacio = { codigo: '', categoria: 'Cubierta', marca: '', medida: '', precio: '', costo: '', stock: '', stock_minimo: '4' }
 
 export default function Stock() {
@@ -36,6 +49,7 @@ export default function Stock() {
     if (!q) return datos
     return datos.filter((p) => {
       const texto = [
+        p.categoria || '',
         p.marca,
         p.medida,
         p.codigo || '',
@@ -51,11 +65,24 @@ export default function Stock() {
     })
   }, [datos, busqueda])
 
+  const productosPorCategoria = useMemo(() => {
+    if (!filtrados) return {}
+    return filtrados.reduce((acc, p) => {
+      const categoria = p.categoria || 'Otro repuesto'
+      if (!acc[categoria]) acc[categoria] = []
+      acc[categoria].push(p)
+      return acc
+    }, {})
+  }, [filtrados])
+
   const gestiona = puede('gerencia')
 
   return (
     <>
-      <Encabezado titulo="Stock" detalle="Neumáticos y repuestos disponibles.">
+      <Encabezado
+        titulo="Stock"
+        detalle="Neumáticos, amortiguadores, filtros, pastillas y repuestos profesionales."
+      >
         {gestiona && (
           <Boton onClick={() => setEditando(vacio)}>
             <Plus size={16} /> Nuevo artículo
@@ -79,64 +106,88 @@ export default function Stock() {
 
       {error && <Aviso>{error}</Aviso>}
 
-      <Tarjeta>
-        {cargando ? (
+      {cargando ? (
+        <Tarjeta>
           <Cargando texto="Leyendo inventario…" alto="min-h-[40vh]" />
-        ) : filtrados.length === 0 ? (
+        </Tarjeta>
+      ) : filtrados.length === 0 ? (
+        <Tarjeta>
           <Vacio
             icono={Boxes}
             titulo="No hay artículos"
             detalle={busqueda ? 'Probá con otra búsqueda.' : 'Cargá el primer artículo del inventario.'}
           />
-        ) : (
-          <Tabla columnas={['Artículo', 'Medida', 'Precio', 'Stock', ...(gestiona ? [''] : [])]}>
-            {filtrados.map((p) => {
-              const critico = p.stock <= p.stock_minimo
-              return (
-                <tr key={p.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
-                  <td data-label="Artículo" className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    {p.imagen_url ? (
-                      <img
-                        src={p.imagen_url}
-                        alt={p.marca}
-                        className="h-16 w-16 rounded-xl object-cover border border-concreto-200"
-                      />
-                    ) : (
-                      <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-concreto-200 bg-concreto-50 text-xs uppercase text-acero-500">
-                        Sin foto
-                      </div>
-                    )}
-                    <div>
-                      <p className="font-medium">{p.marca}</p>
-                      <p className="text-xs uppercase text-acero-500">{p.categoria || 'Sin categoría'}</p>
-                      {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
-                    </div>
-                  </div>
-                </td>
-                  <td data-label="Medida" className="px-4 py-3 font-mono">
-                    {p.medida}
-                  </td>
-                  <td data-label="Precio" className="px-4 py-3 tabular-nums">
-                    {plata(p.precio)}
-                  </td>
-                  <td data-label="Stock" className="px-4 py-3">
-                    <span className="mr-2 font-mono font-semibold tabular-nums">{p.stock}</span>
-                    {critico && <Etiqueta tono="atencion">reponer</Etiqueta>}
-                  </td>
-                  {gestiona && (
-                    <td data-label="Acciones" className="px-4 py-3 text-right">
-                      <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(p)}>
-                        Editar
-                      </Boton>
-                    </td>
-                  )}
-                </tr>
-              )
-            })}
-          </Tabla>
-        )}
-      </Tarjeta>
+        </Tarjeta>
+      ) : (
+        Object.keys(productosPorCategoria)
+          .sort((a, b) => {
+            const indexA = CATEGORIAS.indexOf(a)
+            const indexB = CATEGORIAS.indexOf(b)
+            if (indexA === -1 && indexB === -1) return a.localeCompare(b)
+            if (indexA === -1) return 1
+            if (indexB === -1) return -1
+            return indexA - indexB
+          })
+          .map((categoria) => (
+            <Tarjeta key={categoria} className="mb-4">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-acero-500">{categoria}</p>
+                  <p className="mt-1 text-sm text-acero-500">{productosPorCategoria[categoria].length} artículo(s)</p>
+                </div>
+              </div>
+              <Tabla columnas={['Artículo', 'Medida', 'Precio', 'Stock', ...(gestiona ? [''] : [])]}>
+                {productosPorCategoria[categoria].map((p) => {
+                  const critico = p.stock <= p.stock_minimo
+                  return (
+                    <tr
+                      key={p.id}
+                      className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none"
+                    >
+                      <td data-label="Artículo" className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          {p.imagen_url ? (
+                            <img
+                              src={p.imagen_url}
+                              alt={p.marca}
+                              className="h-16 w-16 rounded-xl object-cover border border-concreto-200"
+                            />
+                          ) : (
+                            <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-concreto-200 bg-concreto-50 text-xs uppercase text-acero-500">
+                              Sin foto
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-medium">{p.marca}</p>
+                            <p className="text-sm text-acero-500">{p.descripcion || 'Repuesto profesional'}</p>
+                            {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="Medida" className="px-4 py-3 font-mono">
+                        {p.medida}
+                      </td>
+                      <td data-label="Precio" className="px-4 py-3 tabular-nums">
+                        {plata(p.precio)}
+                      </td>
+                      <td data-label="Stock" className="px-4 py-3">
+                        <span className="mr-2 font-mono font-semibold tabular-nums">{p.stock}</span>
+                        {critico && <Etiqueta tono="atencion">reponer</Etiqueta>}
+                      </td>
+                      {gestiona && (
+                        <td data-label="Acciones" className="px-4 py-3 text-right">
+                          <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(p)}>
+                            Editar
+                          </Boton>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </Tabla>
+            </Tarjeta>
+          ))
+      )}
 
       {editando && (
         <FormularioProducto
@@ -204,7 +255,7 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
         ? await subirImagen()
         : form.imagen_url?.trim() || null
 
-      const fila = {
+      const filaBase = {
         codigo: form.codigo?.trim() || null,
         categoria: form.categoria || 'Cubierta',
         marca: form.marca.trim(),
@@ -217,9 +268,19 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
         stock_minimo: Number(form.stock_minimo) || 0,
       }
 
-      const { error } = form.id
-        ? await supabase.from('productos').update(fila).eq('id', form.id)
-        : await supabase.from('productos').insert(fila)
+      const ejecutarProducto = async (fila) =>
+        form.id
+          ? await supabase.from('productos').update(fila).eq('id', form.id)
+          : await supabase.from('productos').insert(fila)
+
+      let response = await ejecutarProducto(filaBase)
+      if (response.error && response.error.message.includes('column "categoria" does not exist')) {
+        const filaSinCategoria = { ...filaBase }
+        delete filaSinCategoria.categoria
+        response = await ejecutarProducto(filaSinCategoria)
+      }
+
+      const { error } = response
 
       if (error) {
         const mensaje = error.message.includes('row-level security')
@@ -238,10 +299,13 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
     <Modal titulo={form.id ? 'Editar artículo' : 'Nuevo artículo'} onCerrar={onCerrar}>
       <form onSubmit={guardar} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Campo etiqueta="Categoría" ayuda="Elegí si es cubierta o repuesto.">
+          <Campo etiqueta="Categoría" ayuda="Elegí la sección del producto.">
             <select required className={estiloInput} {...campo('categoria')}>
-              <option value="Cubierta">Cubierta</option>
-              <option value="Repuesto">Repuesto</option>
+              {CATEGORIAS.map((categoria) => (
+                <option key={categoria} value={categoria}>
+                  {categoria}
+                </option>
+              ))}
             </select>
           </Campo>
           <Campo etiqueta="Marca">

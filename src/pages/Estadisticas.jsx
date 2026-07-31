@@ -46,7 +46,18 @@ export default function Estadisticas() {
         .gte('ventas.creada_en', desde),
     ])
 
-    const fallo = ventas.error || ordenes.error || productos.error || ventasDetalle.error
+    let ventasDetalleData = ventasDetalle.data
+    if (ventasDetalle.error?.message?.includes('column "categoria" does not exist')) {
+      const fallback = await supabase
+        .from('venta_items')
+        .select('cantidad, precio_unitario, productos(marca, medida), ventas(creada_en, estado)')
+        .eq('ventas.estado', 'confirmada')
+        .gte('ventas.creada_en', desde)
+      if (fallback.error) return { error: fallback.error }
+      ventasDetalleData = fallback.data
+    }
+
+    const fallo = ventas.error || ordenes.error || productos.error || (ventasDetalle.error && !ventasDetalle.error.message.includes('column "categoria" does not exist'))
     if (fallo) return { error: fallo }
 
     return {
@@ -54,7 +65,7 @@ export default function Estadisticas() {
         ventas: ventas.data,
         ordenes: ordenes.data,
         productos: productos.data,
-        ventasDetalle: ventasDetalle.data,
+        ventasDetalle: ventasDetalleData,
       },
     }
   }, [dias])
