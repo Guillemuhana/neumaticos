@@ -45,15 +45,19 @@ export default function Layout() {
   const items = navegacion.filter((i) => i.roles.includes(rol))
 
   const panel = (
-    <div className="relative flex h-full flex-col gap-6 overflow-hidden bg-gradient-to-b from-caucho-900 to-caucho-950 p-5">
+    <div className="relative flex h-full flex-col overflow-hidden bg-caucho-950 p-4">
       {/* Franja del logo, apenas insinuada: ubica la marca sin gritar. */}
-      <span className="franja absolute inset-y-0 left-0 w-1 opacity-70" aria-hidden="true" />
+      <span className="franja absolute inset-y-0 left-0 w-0.5 opacity-60" aria-hidden="true" />
 
-      <div className="rounded-2xl bg-white p-3.5 shadow-lg shadow-black/20">
+      <div className="mb-6 rounded-lg bg-white px-3 py-2.5">
         <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-full" />
       </div>
 
-      <nav className="flex flex-col gap-1">
+      <p className="mb-2 px-3 text-[0.6875rem] font-semibold uppercase tracking-wider text-acero-500">
+        Gestión
+      </p>
+
+      <nav className="flex flex-col gap-0.5">
         {items.map(({ a, texto, icono: Icono }) => (
           <NavLink
             key={a}
@@ -61,10 +65,10 @@ export default function Layout() {
             end={a === '/'}
             onClick={() => setAbierto(false)}
             className={({ isActive }) =>
-              `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              `group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
                 isActive
-                  ? 'bg-perez-600 text-white shadow-lg shadow-perez-900/30'
-                  : 'text-acero-300 hover:bg-white/5 hover:text-white'
+                  ? 'bg-perez-600 text-white'
+                  : 'text-acero-300 hover:bg-white/[0.07] hover:text-white'
               }`
             }
           >
@@ -73,15 +77,11 @@ export default function Layout() {
                 {/* Marca la fila activa aun para quien no distingue el rojo. */}
                 <span
                   aria-hidden="true"
-                  className={`absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-white transition-opacity ${
-                    isActive ? 'opacity-90' : 'opacity-0'
+                  className={`absolute -left-4 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-perez-500 transition-opacity ${
+                    isActive ? 'opacity-100' : 'opacity-0'
                   }`}
                 />
-                <Icono
-                  size={18}
-                  aria-hidden="true"
-                  className="shrink-0 transition-transform duration-200 group-hover:scale-110"
-                />
+                <Icono size={17} aria-hidden="true" className="shrink-0" />
                 {texto}
               </>
             )}
@@ -89,31 +89,32 @@ export default function Layout() {
         ))}
       </nav>
 
-      <div className="mt-auto rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="flex items-center gap-3">
+      <div className="mt-auto border-t border-white/10 pt-4">
+        <div className="flex items-center gap-2.5 px-1">
           {perfil?.imagen_url ? (
             <img
               src={perfil.imagen_url}
               alt=""
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/20"
+              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/15"
             />
           ) : (
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-perez-600 text-sm font-bold text-white">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-perez-600 text-xs font-bold text-white">
               {iniciales(perfil?.nombre)}
             </span>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-white">{perfil?.nombre}</p>
-            <p className="font-mono text-xs text-acero-400">{nombreRol[rol] ?? '—'}</p>
+            <p className="text-xs text-acero-500">{nombreRol[rol] ?? '—'}</p>
           </div>
+          <button
+            onClick={cerrarSesion}
+            aria-label="Salir"
+            title="Salir"
+            className="shrink-0 rounded-lg p-2 text-acero-400 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
-
-        <button
-          onClick={cerrarSesion}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-acero-300 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <LogOut size={16} /> Salir
-        </button>
       </div>
     </div>
   )

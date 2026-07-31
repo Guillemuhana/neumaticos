@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Boxes, ImageOff, Package, Plus, Search, Wallet, X } from 'lucide-react'
+import { AlertTriangle, Boxes, ImageOff, Plus, Search, X } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
@@ -9,11 +9,8 @@ import {
   Boton,
   Campo,
   Cargando,
-  Encabezado,
   Etiqueta,
-  Metrica,
   Modal,
-  Tabla,
   Tarjeta,
   Vacio,
   estiloInput,
@@ -49,6 +46,7 @@ export default function Stock() {
   /* La categoría es su propio filtro. Antes escribía el nombre dentro del
      buscador, así que filtrar borraba lo que estabas buscando. */
   const [categoria, setCategoria] = useState('todas')
+  const [soloCriticos, setSoloCriticos] = useState(false)
   const [editando, setEditando] = useState(null)
 
   const { datos, cargando, error, recargar } = useConsulta(
@@ -81,20 +79,21 @@ export default function Stock() {
     return [...mapa.entries()].sort((a, b) => ordenCategoria(a[0], b[0]))
   }, [porTexto])
 
-  const filtrados = useMemo(
-    () => (categoria === 'todas' ? porTexto : porTexto.filter((p) => (p.categoria || 'Otro repuesto') === categoria)),
-    [porTexto, categoria]
-  )
+  const filtrados = useMemo(() => {
+    let lista = categoria === 'todas'
+      ? porTexto
+      : porTexto.filter((p) => (p.categoria || 'Otro repuesto') === categoria)
 
-  const grupos = useMemo(() => {
-    const mapa = new Map()
-    filtrados.forEach((p) => {
-      const c = p.categoria || 'Otro repuesto'
-      if (!mapa.has(c)) mapa.set(c, [])
-      mapa.get(c).push(p)
-    })
-    return [...mapa.entries()].sort((a, b) => ordenCategoria(a[0], b[0]))
-  }, [filtrados])
+    if (soloCriticos) lista = lista.filter((p) => p.stock <= p.stock_minimo)
+
+    /* Una sola lista, ordenada por categoría y después por marca: se recorre
+       de arriba a abajo sin que cada grupo abra su propia tarjeta. */
+    return [...lista].sort(
+      (a, b) =>
+        ordenCategoria(a.categoria || 'Otro repuesto', b.categoria || 'Otro repuesto') ||
+        (a.marca ?? '').localeCompare(b.marca ?? '')
+    )
+  }, [porTexto, categoria, soloCriticos])
 
   const resumen = useMemo(
     () => ({
@@ -107,39 +106,34 @@ export default function Stock() {
   )
 
   const gestiona = puede('gerencia')
-  const hayFiltro = busqueda.trim() !== '' || categoria !== 'todas'
+  const hayFiltro = busqueda.trim() !== '' || categoria !== 'todas' || soloCriticos
 
   const limpiar = () => {
     setBusqueda('')
     setCategoria('todas')
+    setSoloCriticos(false)
   }
 
   return (
     <>
-      <Encabezado titulo="Stock" detalle="Neumáticos, filtros, pastillas y repuestos del local.">
+      {/* Título y resumen en un solo renglón. Lo de arriba no puede ocupar más
+          alto que las primeras filas: lo que se viene a mirar es la lista. */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="display text-xl font-bold text-caucho-950">Stock</h1>
+          <p className="text-sm text-acero-500">
+            {numero(resumen.articulos)} artículos · {numero(resumen.unidades)} unidades ·{' '}
+            <span className="font-medium text-caucho-700">{plata(resumen.valor)}</span> a costo
+          </p>
+        </div>
         {gestiona && (
-          <Boton onClick={() => setEditando(vacio)}>
+          <Boton onClick={() => setEditando(vacio)} className="px-3.5 py-2">
             <Plus size={16} /> Nuevo artículo
           </Boton>
         )}
-      </Encabezado>
-
-      <div className="cascada mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metrica icono={Package} titulo="Artículos" valor={numero(resumen.articulos)} pie="Activos en el catálogo" />
-        <Metrica icono={Boxes} titulo="Unidades" valor={numero(resumen.unidades)} pie="Suma de todo el stock" />
-        <Metrica icono={Wallet} tono="marca" titulo="Valor a costo" valor={plata(resumen.valor)} pie="Capital inmovilizado" />
-        <Metrica
-          icono={AlertTriangle}
-          tono={resumen.criticos ? 'atencion' : 'conforme'}
-          titulo="Para reponer"
-          valor={numero(resumen.criticos)}
-          pie="En el mínimo o debajo"
-        />
       </div>
 
-      {/* Buscador y categorías en una sola barra: los chips ocupan una línea
-          en vez de una columna de 280px llena de ceros. */}
-      <Tarjeta className="mb-6 p-4">
+      <Tarjeta className="mb-3 p-3">
         <div className="relative">
           <Search
             size={16}
@@ -164,7 +158,7 @@ export default function Stock() {
           )}
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           <Chip activo={categoria === 'todas'} onClick={() => setCategoria('todas')} cantidad={porTexto.length}>
             Todas
           </Chip>
@@ -178,6 +172,31 @@ export default function Stock() {
               {nombre}
             </Chip>
           ))}
+
+          {/* Lo único accionable del inventario merece un atajo propio. */}
+          {resumen.criticos > 0 && (
+            <button
+              type="button"
+              onClick={() => setSoloCriticos((v) => !v)}
+              aria-pressed={soloCriticos}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-all duration-200 ${
+                soloCriticos
+                  ? 'border-atencion-600 bg-atencion-600 text-white'
+                  : 'border-atencion-100 bg-atencion-50 text-atencion-700 hover:border-atencion-600/40'
+              }`}
+            >
+              <AlertTriangle size={14} aria-hidden="true" />
+              Para reponer
+              <span
+                className={`rounded-full px-1.5 text-xs font-semibold tabular-nums ${
+                  soloCriticos ? 'bg-white/20' : 'bg-white/70'
+                }`}
+              >
+                {numero(resumen.criticos)}
+              </span>
+            </button>
+          )}
+
           {hayFiltro && (
             <button
               onClick={limpiar}
@@ -191,67 +210,78 @@ export default function Stock() {
 
       {error && <Aviso>{error}</Aviso>}
 
-      {cargando ? (
-        <Tarjeta>
+      <Tarjeta className="overflow-hidden">
+        {cargando ? (
           <Cargando texto="Leyendo inventario…" alto="min-h-[40vh]" />
-        </Tarjeta>
-      ) : grupos.length === 0 ? (
-        <Tarjeta>
+        ) : filtrados.length === 0 ? (
           <Vacio
             icono={Boxes}
             titulo="No hay artículos"
             detalle={hayFiltro ? 'Probá con otra búsqueda o quitá los filtros.' : 'Cargá el primer artículo del inventario.'}
           />
-        </Tarjeta>
-      ) : (
-        <div className="space-y-5">
-          {grupos.map(([nombre, items]) => (
-            <section key={nombre}>
-              {/* Encabezado discreto: el conteo va una sola vez, al lado del
-                  nombre, en vez de repetirse en un badge gigante. */}
-              <div className="mb-2 flex items-baseline gap-2 px-1">
-                <h2 className="display font-bold text-caucho-900">{nombre}</h2>
-                <span className="font-mono text-xs text-acero-400">{numero(items.length)}</span>
-              </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="responsive-table w-full text-sm sm:min-w-[48rem]">
+                {/* El encabezado queda fijo: en una lista larga, saber qué
+                    columna se está mirando importa más que ganar 36px. */}
+                <thead className="hidden sm:table-header-group">
+                  <tr className="border-b border-concreto-200 bg-white text-left">
+                    {['Artículo', 'Categoría', 'Medida', 'Precio', 'Stock'].map((c, i) => (
+                      <th
+                        key={c}
+                        className={`sticky top-0 bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-acero-500 ${
+                          i >= 3 ? 'text-right' : ''
+                        }`}
+                      >
+                        {c}
+                      </th>
+                    ))}
+                    {gestiona && <th className="sticky top-0 bg-white px-4 py-2.5" />}
+                  </tr>
+                </thead>
 
-              <Tarjeta>
-                <Tabla columnas={['Artículo', 'Medida', 'Precio', 'Stock', ...(gestiona ? [''] : [])]}>
-                  {items.map((p) => {
+                <tbody className="divide-y divide-concreto-200">
+                  {filtrados.map((p) => {
                     const critico = p.stock <= p.stock_minimo
                     return (
-                      <tr key={p.id} className="transition-colors hover:bg-concreto-50">
-                        <td data-label="Artículo" className="px-4 py-3">
+                      <tr key={p.id} className="group transition-colors hover:bg-concreto-50">
+                        <td data-label="Artículo" className="px-4 py-2.5">
                           <div className="flex items-center gap-3">
                             {p.imagen_url ? (
                               <img
                                 src={p.imagen_url}
                                 alt=""
-                                className="h-11 w-11 shrink-0 rounded-lg border border-concreto-200 object-cover"
+                                className="h-9 w-9 shrink-0 rounded-md border border-concreto-200 object-cover"
                               />
                             ) : (
-                              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-concreto-200 bg-concreto-50 text-acero-300">
-                                <ImageOff size={16} aria-hidden="true" />
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-concreto-200 bg-concreto-50 text-acero-300">
+                                <ImageOff size={14} aria-hidden="true" />
                               </span>
                             )}
                             <div className="min-w-0">
                               <p className="truncate font-semibold text-caucho-900">{p.marca}</p>
-                              {p.descripcion && (
-                                <p className="truncate text-sm text-acero-500">{p.descripcion}</p>
-                              )}
-                              {p.codigo && <p className="font-mono text-xs text-acero-400">{p.codigo}</p>}
+                              <p className="truncate text-xs text-acero-500">
+                                {p.descripcion || '—'}
+                                {p.codigo && <span className="font-mono"> · {p.codigo}</span>}
+                              </p>
                             </div>
                           </div>
                         </td>
-                        <td data-label="Medida" className="px-4 py-3 font-mono text-caucho-700">
+                        <td data-label="Categoría" className="px-4 py-2.5 text-acero-500">
+                          {p.categoria || 'Otro repuesto'}
+                        </td>
+                        <td data-label="Medida" className="px-4 py-2.5 font-mono text-caucho-700">
                           {p.medida}
                         </td>
-                        <td data-label="Precio" className="px-4 py-3 font-semibold tabular-nums">
+                        <td data-label="Precio" className="px-4 py-2.5 font-semibold tabular-nums sm:text-right">
                           {plata(p.precio)}
                         </td>
-                        <td data-label="Stock" className="px-4 py-3">
+                        <td data-label="Stock" className="px-4 py-2.5 sm:text-right">
                           {/* Solo se etiqueta lo que necesita acción: un "OK" en
                               cada fila es ruido y esconde lo que sí importa. */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 sm:justify-end">
+                            {critico && <Etiqueta tono="atencion">reponer</Etiqueta>}
                             <span
                               className={`font-mono font-semibold tabular-nums ${
                                 critico ? 'text-atencion-700' : 'text-caucho-900'
@@ -259,25 +289,33 @@ export default function Stock() {
                             >
                               {p.stock}
                             </span>
-                            {critico && <Etiqueta tono="atencion">reponer</Etiqueta>}
                           </div>
                         </td>
                         {gestiona && (
-                          <td data-label="Acciones" className="px-4 py-3 text-right">
-                            <Boton variante="fantasma" className="px-3 py-1.5" onClick={() => setEditando(p)}>
+                          <td data-label="Acciones" className="px-4 py-2.5 text-right">
+                            <button
+                              onClick={() => setEditando(p)}
+                              className="rounded-lg px-2.5 py-1 text-sm font-semibold text-acero-500 transition-colors hover:bg-concreto-200 hover:text-caucho-900 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+                            >
                               Editar
-                            </Boton>
+                            </button>
                           </td>
                         )}
                       </tr>
                     )
                   })}
-                </Tabla>
-              </Tarjeta>
-            </section>
-          ))}
-        </div>
-      )}
+                </tbody>
+              </table>
+            </div>
+
+            {hayFiltro && (
+              <p className="border-t border-concreto-200 px-4 py-2 text-xs text-acero-500">
+                Mostrando {numero(filtrados.length)} de {numero(resumen.articulos)} artículos.
+              </p>
+            )}
+          </>
+        )}
+      </Tarjeta>
 
       {editando && (
         <FormularioProducto
@@ -300,7 +338,7 @@ function Chip({ activo, cantidad, onClick, children }) {
       type="button"
       onClick={onClick}
       aria-pressed={activo}
-      className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-200 ${
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-all duration-200 ${
         activo
           ? 'border-perez-600 bg-perez-600 text-white shadow-sm shadow-perez-900/20'
           : 'border-concreto-200 bg-white text-caucho-700 hover:border-acero-300 hover:bg-concreto-50'
@@ -308,7 +346,7 @@ function Chip({ activo, cantidad, onClick, children }) {
     >
       {children}
       <span
-        className={`rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums ${
+        className={`rounded-full px-1.5 text-xs font-semibold tabular-nums ${
           activo ? 'bg-white/20 text-white' : 'bg-concreto-100 text-acero-500'
         }`}
       >
