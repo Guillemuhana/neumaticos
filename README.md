@@ -19,7 +19,18 @@ cp .env.example .env   # completar con el proyecto de Supabase
 # ADMIN_PASSWORD=ContraseñaSegura123
 # ADMIN_NOMBRE=Administrador
 npm run create-admin
+npm run ensure-perfiles
 npm run dev
+```
+
+Si el sitio muestra un error como “Could not find the table 'public.perfiles' in the schema cache”, significa que el esquema de base de datos no está aplicado en Supabase.
+
+Abre el proyecto en Supabase, ve a SQL Editor y ejecuta el contenido de `supabase/schema.sql`, o aplica el esquema con la CLI de Supabase si la tenés instalada.
+
+Si ya creaste usuarios en Auth y algunos no tienen perfil, también podés ejecutar:
+
+```bash
+npm run ensure-perfiles
 ```
 
 Las credenciales salen de Supabase → Project Settings → API (`Project URL` y la
