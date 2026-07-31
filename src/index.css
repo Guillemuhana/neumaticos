@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* ---- Tokens de marca -------------------------------------------------
+   Rojo Pérez tomado del logo (#B3262C) · caucho (grafito de taller)
+   concreto (superficie de trabajo) · ámbar de atención · verde conforme */
+@theme {
+  --font-display: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-perez-800: #6E141A;
+  --color-perez-700: #8E1B22;
+  --color-perez-600: #B3262C;
+  --color-perez-500: #C8323A;
+  --color-perez-300: #E4737A;
+  --color-perez-50:  #FBEEEF;
+
+  --color-caucho-950: #0E1013;
+  --color-caucho-900: #16181C;
+  --color-caucho-800: #22262C;
+  --color-caucho-700: #313842;
+  --color-acero-500: #6B7684;
+  --color-acero-300: #AEB6C0;
+  --color-acero-200: #D7DBE0;
+  --color-concreto-50: #FAFAF8;
+  --color-concreto-100: #F2F3F0;
+  --color-concreto-200: #E5E7E2;
+  --color-atencion-600: #B45309;
+  --color-conforme-500: #1C8A57;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-concreto-100);
+  color: var(--color-caucho-900);
+}
+h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.015em; }
+
+/* Cinta diagonal: retoma el listón del logo. Único gesto decorativo. */
+.franja {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-perez-600) 0 10px,
+    var(--color-perez-800) 10px 20px
+  );
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-perez-500);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
