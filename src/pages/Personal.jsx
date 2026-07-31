@@ -355,26 +355,23 @@ function FormularioEmpleado({ empleado, onCerrar, onGuardado, guardarEmpleado })
   const subirImagen = async () => {
     if (!imagenFile) return form.imagen_url?.trim() || null
 
-    const nombre = `empleados/${Date.now()}_${imagenFile.name}`
-    let upload = await supabase.storage.from('empleados').upload(nombre, imagenFile, {
-      cacheControl: '3600',
-      upsert: true,
-    })
+    const nombre = `${Date.now()}_${imagenFile.name}`
+    const { error: errorSubida } = await supabase.storage
+      .from('empleados')
+      .upload(nombre, imagenFile, { cacheControl: '3600', upsert: true })
 
-    if (upload.error && upload.error.message?.includes('bucket') ) {
-      upload = await supabase.storage.from('productos').upload(nombre, imagenFile, {
-        cacheControl: '3600',
-        upsert: true,
-      })
+    /* El bucket no se crea solo: si falta, el mensaje crudo de Supabase
+       ("Bucket not found") no dice qué hacer. Ver supabase/storage.sql. */
+    if (errorSubida) {
+      if (errorSubida.message?.toLowerCase().includes('bucket not found')) {
+        throw new Error(
+          'Falta el bucket «empleados» en Supabase Storage. Corré supabase/storage.sql en el SQL Editor.'
+        )
+      }
+      throw errorSubida
     }
 
-    if (upload.error) throw upload.error
-
-    const { data: urlData, error: urlError } = await supabase.storage
-      .from(upload.data?.bucket || 'empleados')
-      .getPublicUrl(nombre)
-
-    if (urlError) throw urlError
+    const { data: urlData } = supabase.storage.from('empleados').getPublicUrl(nombre)
     return urlData.publicUrl
   }
 

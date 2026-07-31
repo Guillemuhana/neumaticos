@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Boxes, Plus, Search } from 'lucide-react'
+import { Boxes, ChevronDown, Plus, Search } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
@@ -42,6 +42,13 @@ export default function Stock() {
     () => supabase.from('productos').select('*').eq('activo', true).order('marca'),
     []
   )
+
+  const [categoriasAbiertas, setCategoriasAbiertas] = useState(
+    () => Object.fromEntries(CATEGORIAS.map((categoria) => [categoria, true]))
+  )
+
+  const toggleCategoria = (categoria) =>
+    setCategoriasAbiertas((prev) => ({ ...prev, [categoria]: !prev[categoria] }))
 
   const filtrados = useMemo(() => {
     if (!datos) return []
@@ -276,18 +283,23 @@ function FormularioProducto({ producto, onCerrar, onGuardado, gestiona }) {
   const subirImagen = async () => {
     if (!imagenFile) return null
 
-    const nombre = `productos/${Date.now()}_${imagenFile.name}`
-    const { error: uploadError } = await supabase.storage
+    const nombre = `${Date.now()}_${imagenFile.name}`
+    const { error: errorSubida } = await supabase.storage
       .from('productos')
       .upload(nombre, imagenFile, { cacheControl: '3600', upsert: true })
 
-    if (uploadError) throw uploadError
+    /* Mismo caso que en Personal: sin el bucket creado, Supabase solo dice
+       "Bucket not found". Ver supabase/storage.sql. */
+    if (errorSubida) {
+      if (errorSubida.message?.toLowerCase().includes('bucket not found')) {
+        throw new Error(
+          'Falta el bucket «productos» en Supabase Storage. Corré supabase/storage.sql en el SQL Editor.'
+        )
+      }
+      throw errorSubida
+    }
 
-    const { data: urlData, error: urlError } = await supabase.storage
-      .from('productos')
-      .getPublicUrl(nombre)
-
-    if (urlError) throw urlError
+    const { data: urlData } = supabase.storage.from('productos').getPublicUrl(nombre)
     return urlData.publicUrl
   }
 
