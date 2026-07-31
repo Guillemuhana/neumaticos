@@ -96,9 +96,13 @@ export default function Personal() {
     if (!datosEmpleado.email) return 'El email es obligatorio.'
     if (!['vendedor', 'mecanico', 'gerencia'].includes(datosEmpleado.rol)) return 'Rol inválido.'
 
+    const esErrorColumna = (error) =>
+      error?.message?.toLowerCase().includes('does not exist') &&
+      /telefono|email|documento|imagen_url/.test(error.message.toLowerCase())
+
     const actualizarPerfil = async (fila, id) => {
       const { error } = await supabase.from('perfiles').update(fila).eq('id', id)
-      if (error && error.message.includes('column "telefono" does not exist')) {
+      if (esErrorColumna(error)) {
         const fallback = { ...fila }
         delete fallback.telefono
         delete fallback.email
@@ -108,6 +112,12 @@ export default function Personal() {
         return fallbackError
       }
       return error
+    }
+
+    if (empleado.id) {
+      const { error } = await actualizarPerfil(datosEmpleado, empleado.id)
+      if (error) return error.message
+      return null
     }
 
     if (!empleado.password) return 'La contraseña es obligatoria para un nuevo empleado.'

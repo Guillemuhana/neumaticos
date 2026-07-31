@@ -132,6 +132,7 @@ export default function Stock() {
               Usá la búsqueda para encontrar rápido por categoría, marca, medida, precio o código.
             </p>
           </div>
+        </div>
         </aside>
 
         <section>
