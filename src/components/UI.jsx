@@ -116,9 +116,7 @@ export function Metrica({ icono: Icono, titulo, valor, pie, tono = 'neutro', cla
       }
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-acero-500">
-          {titulo}
-        </p>
+        <p className="text-sm font-medium text-acero-500">{titulo}</p>
         {Icono && (
           <span className={`rounded-2xl p-2 ${tonos[tono]}`}>
             <Icono size={18} aria-hidden="true" />
@@ -142,7 +140,7 @@ export function Etiqueta({ tono = 'neutro', children }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.15em] ${tonos[tono]}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${tonos[tono]}`}
     >
       {children}
     </span>

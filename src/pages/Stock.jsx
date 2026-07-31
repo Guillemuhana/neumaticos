@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Boxes, ChevronDown, Plus, Search } from 'lucide-react'
+import { AlertTriangle, Boxes, ImageOff, Package, Plus, Search, Wallet, X } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
@@ -11,6 +11,7 @@ import {
   Cargando,
   Encabezado,
   Etiqueta,
+  Metrica,
   Modal,
   Tabla,
   Tarjeta,
@@ -33,9 +34,21 @@ const CATEGORIAS = [
 
 const vacio = { codigo: '', categoria: 'Cubierta', marca: '', medida: '', precio: '', costo: '', stock: '', stock_minimo: '4' }
 
+const ordenCategoria = (a, b) => {
+  const ia = CATEGORIAS.indexOf(a)
+  const ib = CATEGORIAS.indexOf(b)
+  if (ia === -1 && ib === -1) return a.localeCompare(b)
+  if (ia === -1) return 1
+  if (ib === -1) return -1
+  return ia - ib
+}
+
 export default function Stock() {
   const { puede } = useAuth()
   const [busqueda, setBusqueda] = useState('')
+  /* La categoría es su propio filtro. Antes escribía el nombre dentro del
+     buscador, así que filtrar borraba lo que estabas buscando. */
+  const [categoria, setCategoria] = useState('todas')
   const [editando, setEditando] = useState(null)
 
   const { datos, cargando, error, recargar } = useConsulta(
@@ -43,53 +56,67 @@ export default function Stock() {
     []
   )
 
-  const [categoriasAbiertas, setCategoriasAbiertas] = useState(
-    () => Object.fromEntries(CATEGORIAS.map((categoria) => [categoria, true]))
-  )
+  const productos = datos ?? []
 
-  const toggleCategoria = (categoria) =>
-    setCategoriasAbiertas((prev) => ({ ...prev, [categoria]: !prev[categoria] }))
-
-  const filtrados = useMemo(() => {
-    if (!datos) return []
+  const porTexto = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
-    if (!q) return datos
-    return datos.filter((p) => {
-      const texto = [
-        p.categoria || '',
-        p.marca,
-        p.medida,
-        p.codigo || '',
-        p.descripcion || '',
-        p.precio != null ? String(p.precio) : '',
-        p.costo != null ? String(p.costo) : '',
-        p.stock != null ? String(p.stock) : '',
-        p.stock_minimo != null ? String(p.stock_minimo) : '',
-      ]
+    if (!q) return productos
+    return productos.filter((p) =>
+      [p.categoria, p.marca, p.medida, p.codigo, p.descripcion, p.precio, p.stock]
+        .filter((v) => v != null && v !== '')
         .join(' ')
         .toLowerCase()
-      return texto.includes(q)
-    })
-  }, [datos, busqueda])
+        .includes(q)
+    )
+  }, [productos, busqueda])
 
-  const productosPorCategoria = useMemo(() => {
-    if (!filtrados) return {}
-    return filtrados.reduce((acc, p) => {
-      const categoria = p.categoria || 'Otro repuesto'
-      if (!acc[categoria]) acc[categoria] = []
-      acc[categoria].push(p)
-      return acc
-    }, {})
+  /* Los conteos de los chips salen del resultado de la búsqueda, no del total:
+     si no, prometen artículos que el filtro de texto ya descartó. */
+  const conteos = useMemo(() => {
+    const mapa = new Map()
+    porTexto.forEach((p) => {
+      const c = p.categoria || 'Otro repuesto'
+      mapa.set(c, (mapa.get(c) ?? 0) + 1)
+    })
+    return [...mapa.entries()].sort((a, b) => ordenCategoria(a[0], b[0]))
+  }, [porTexto])
+
+  const filtrados = useMemo(
+    () => (categoria === 'todas' ? porTexto : porTexto.filter((p) => (p.categoria || 'Otro repuesto') === categoria)),
+    [porTexto, categoria]
+  )
+
+  const grupos = useMemo(() => {
+    const mapa = new Map()
+    filtrados.forEach((p) => {
+      const c = p.categoria || 'Otro repuesto'
+      if (!mapa.has(c)) mapa.set(c, [])
+      mapa.get(c).push(p)
+    })
+    return [...mapa.entries()].sort((a, b) => ordenCategoria(a[0], b[0]))
   }, [filtrados])
 
+  const resumen = useMemo(
+    () => ({
+      articulos: productos.length,
+      unidades: productos.reduce((a, p) => a + (p.stock ?? 0), 0),
+      valor: productos.reduce((a, p) => a + (p.stock ?? 0) * Number(p.costo ?? 0), 0),
+      criticos: productos.filter((p) => p.stock <= p.stock_minimo).length,
+    }),
+    [productos]
+  )
+
   const gestiona = puede('gerencia')
+  const hayFiltro = busqueda.trim() !== '' || categoria !== 'todas'
+
+  const limpiar = () => {
+    setBusqueda('')
+    setCategoria('todas')
+  }
 
   return (
     <>
-      <Encabezado
-        titulo="Stock"
-        detalle="Neumáticos, amortiguadores, filtros, pastillas y repuestos profesionales."
-      >
+      <Encabezado titulo="Stock" detalle="Neumáticos, filtros, pastillas y repuestos del local.">
         {gestiona && (
           <Boton onClick={() => setEditando(vacio)}>
             <Plus size={16} /> Nuevo artículo
@@ -97,161 +124,160 @@ export default function Stock() {
         )}
       </Encabezado>
 
-      <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="relative">
-          <div className="sticky top-24 space-y-4 rounded-[1.5rem] border border-concreto-200 bg-white p-5 shadow-sm shadow-caucho-900/5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-acero-500">Categorías</p>
-                <p className="mt-1 text-sm text-acero-500">Filtrá rápido por tipo de producto.</p>
-              </div>
-              <Boxes size={20} className="text-perez-600" />
-            </div>
-
-          <div className="space-y-2">
-            {CATEGORIAS.map((categoria) => {
-              const total = productosPorCategoria[categoria]?.length || 0
-              const activa = categoria.toLowerCase().includes(busqueda.trim().toLowerCase())
-              return (
-                <button
-                  key={categoria}
-                  type="button"
-                  onClick={() => setBusqueda(categoria)}
-                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
-                    total > 0
-                      ? 'border-concreto-200 bg-white text-caucho-900 hover:border-perez-300'
-                      : 'border-concreto-100 bg-concreto-50 text-acero-400 cursor-not-allowed'
-                  } ${activa ? 'border-perez-500 bg-perez-50 text-perez-700' : ''}`}
-                  disabled={total === 0}
-                >
-                  <span>{categoria}</span>
-                  <span className="rounded-full bg-concreto-100 px-2 py-0.5 text-xs font-semibold text-acero-500">
-                    {numero(total)}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="rounded-2xl border border-concreto-200 bg-concreto-50 px-4 py-4 text-sm text-acero-500">
-            <p className="font-semibold text-caucho-900">Vista de inventario</p>
-            <p className="mt-2 text-sm leading-6">
-              Usá la búsqueda para encontrar rápido por categoría, marca, medida, precio o código.
-            </p>
-          </div>
-        </div>
-        </aside>
-
-        <section>
-          <div className="relative mb-4">
-            <Search
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-acero-500"
-              aria-hidden="true"
-            />
-            <input
-              className={`${estiloInput} pl-9`}
-              placeholder="Buscar por categoría, marca, medida, precio o código…"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-            />
-          </div>
-
-          {error && <Aviso>{error}</Aviso>}
-
-          {cargando ? (
-            <Tarjeta>
-              <Cargando texto="Leyendo inventario…" alto="min-h-[40vh]" />
-            </Tarjeta>
-          ) : filtrados.length === 0 ? (
-            <Tarjeta>
-              <Vacio
-                icono={Boxes}
-                titulo="No hay artículos"
-                detalle={busqueda ? 'Probá con otra búsqueda.' : 'Cargá el primer artículo del inventario.'}
-              />
-            </Tarjeta>
-          ) : (
-            Object.keys(productosPorCategoria)
-              .sort((a, b) => {
-                const indexA = CATEGORIAS.indexOf(a)
-                const indexB = CATEGORIAS.indexOf(b)
-                if (indexA === -1 && indexB === -1) return a.localeCompare(b)
-                if (indexA === -1) return 1
-                if (indexB === -1) return -1
-                return indexA - indexB
-              })
-              .map((categoria) => (
-                <Tarjeta key={categoria} className="mb-4">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-acero-500">{categoria}</p>
-                      <p className="mt-1 text-sm text-acero-500">{productosPorCategoria[categoria].length} artículo(s)</p>
-                    </div>
-                    <span className="rounded-full bg-concreto-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-acero-500">
-                      {numero(productosPorCategoria[categoria].length)} en stock
-                    </span>
-                  </div>
-                  <Tabla columnas={['Artículo', 'Medida', 'Precio', 'Stock', ...(gestiona ? [''] : [])]}>
-                    {productosPorCategoria[categoria].map((p) => {
-                      const critico = p.stock <= p.stock_minimo
-                      return (
-                        <tr
-                          key={p.id}
-                          className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none"
-                        >
-                          <td data-label="Artículo" className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              {p.imagen_url ? (
-                                <img
-                                  src={p.imagen_url}
-                                  alt={p.marca}
-                                  className="h-16 w-16 rounded-xl object-cover border border-concreto-200"
-                                />
-                              ) : (
-                                <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-concreto-200 bg-concreto-50 text-xs uppercase text-acero-500">
-                                  Sin foto
-                                </div>
-                              )}
-                              <div>
-                                <p className="font-medium">{p.marca}</p>
-                                <p className="text-sm text-acero-500">{p.descripcion || 'Repuesto profesional'}</p>
-                                {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
-                              </div>
-                            </div>
-                          </td>
-                          <td data-label="Medida" className="px-4 py-3 font-mono">
-                            {p.medida}
-                          </td>
-                          <td data-label="Precio" className="px-4 py-3 tabular-nums">
-                            {plata(p.precio)}
-                          </td>
-                          <td data-label="Stock" className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-semibold tabular-nums">{p.stock}</span>
-                              {critico ? (
-                                <Etiqueta tono="atencion">reponer</Etiqueta>
-                              ) : (
-                                <Etiqueta tono="conforme">OK</Etiqueta>
-                              )}
-                            </div>
-                          </td>
-                          {gestiona && (
-                            <td data-label="Acciones" className="px-4 py-3 text-right">
-                              <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(p)}>
-                                Editar
-                              </Boton>
-                            </td>
-                          )}
-                        </tr>
-                      )
-                    })}
-                  </Tabla>
-                </Tarjeta>
-              ))
-          )}
-        </section>
+      <div className="cascada mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metrica icono={Package} titulo="Artículos" valor={numero(resumen.articulos)} pie="Activos en el catálogo" />
+        <Metrica icono={Boxes} titulo="Unidades" valor={numero(resumen.unidades)} pie="Suma de todo el stock" />
+        <Metrica icono={Wallet} tono="marca" titulo="Valor a costo" valor={plata(resumen.valor)} pie="Capital inmovilizado" />
+        <Metrica
+          icono={AlertTriangle}
+          tono={resumen.criticos ? 'atencion' : 'conforme'}
+          titulo="Para reponer"
+          valor={numero(resumen.criticos)}
+          pie="En el mínimo o debajo"
+        />
       </div>
+
+      {/* Buscador y categorías en una sola barra: los chips ocupan una línea
+          en vez de una columna de 280px llena de ceros. */}
+      <Tarjeta className="mb-6 p-4">
+        <div className="relative">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-acero-400"
+            aria-hidden="true"
+          />
+          <input
+            className={`${estiloInput} pl-9 ${busqueda ? 'pr-10' : ''}`}
+            placeholder="Buscar por marca, medida, código o precio…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          {busqueda && (
+            <button
+              type="button"
+              onClick={() => setBusqueda('')}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-acero-400 transition-colors hover:bg-concreto-100 hover:text-caucho-800"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Chip activo={categoria === 'todas'} onClick={() => setCategoria('todas')} cantidad={porTexto.length}>
+            Todas
+          </Chip>
+          {conteos.map(([nombre, cantidad]) => (
+            <Chip
+              key={nombre}
+              activo={categoria === nombre}
+              onClick={() => setCategoria(categoria === nombre ? 'todas' : nombre)}
+              cantidad={cantidad}
+            >
+              {nombre}
+            </Chip>
+          ))}
+          {hayFiltro && (
+            <button
+              onClick={limpiar}
+              className="rounded-full px-3 py-1.5 text-sm font-medium text-acero-500 underline-offset-4 transition-colors hover:text-perez-700 hover:underline"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+      </Tarjeta>
+
+      {error && <Aviso>{error}</Aviso>}
+
+      {cargando ? (
+        <Tarjeta>
+          <Cargando texto="Leyendo inventario…" alto="min-h-[40vh]" />
+        </Tarjeta>
+      ) : grupos.length === 0 ? (
+        <Tarjeta>
+          <Vacio
+            icono={Boxes}
+            titulo="No hay artículos"
+            detalle={hayFiltro ? 'Probá con otra búsqueda o quitá los filtros.' : 'Cargá el primer artículo del inventario.'}
+          />
+        </Tarjeta>
+      ) : (
+        <div className="space-y-5">
+          {grupos.map(([nombre, items]) => (
+            <section key={nombre}>
+              {/* Encabezado discreto: el conteo va una sola vez, al lado del
+                  nombre, en vez de repetirse en un badge gigante. */}
+              <div className="mb-2 flex items-baseline gap-2 px-1">
+                <h2 className="display font-bold text-caucho-900">{nombre}</h2>
+                <span className="font-mono text-xs text-acero-400">{numero(items.length)}</span>
+              </div>
+
+              <Tarjeta>
+                <Tabla columnas={['Artículo', 'Medida', 'Precio', 'Stock', ...(gestiona ? [''] : [])]}>
+                  {items.map((p) => {
+                    const critico = p.stock <= p.stock_minimo
+                    return (
+                      <tr key={p.id} className="transition-colors hover:bg-concreto-50">
+                        <td data-label="Artículo" className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            {p.imagen_url ? (
+                              <img
+                                src={p.imagen_url}
+                                alt=""
+                                className="h-11 w-11 shrink-0 rounded-lg border border-concreto-200 object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-concreto-200 bg-concreto-50 text-acero-300">
+                                <ImageOff size={16} aria-hidden="true" />
+                              </span>
+                            )}
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-caucho-900">{p.marca}</p>
+                              {p.descripcion && (
+                                <p className="truncate text-sm text-acero-500">{p.descripcion}</p>
+                              )}
+                              {p.codigo && <p className="font-mono text-xs text-acero-400">{p.codigo}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td data-label="Medida" className="px-4 py-3 font-mono text-caucho-700">
+                          {p.medida}
+                        </td>
+                        <td data-label="Precio" className="px-4 py-3 font-semibold tabular-nums">
+                          {plata(p.precio)}
+                        </td>
+                        <td data-label="Stock" className="px-4 py-3">
+                          {/* Solo se etiqueta lo que necesita acción: un "OK" en
+                              cada fila es ruido y esconde lo que sí importa. */}
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`font-mono font-semibold tabular-nums ${
+                                critico ? 'text-atencion-700' : 'text-caucho-900'
+                              }`}
+                            >
+                              {p.stock}
+                            </span>
+                            {critico && <Etiqueta tono="atencion">reponer</Etiqueta>}
+                          </div>
+                        </td>
+                        {gestiona && (
+                          <td data-label="Acciones" className="px-4 py-3 text-right">
+                            <Boton variante="fantasma" className="px-3 py-1.5" onClick={() => setEditando(p)}>
+                              Editar
+                            </Boton>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </Tabla>
+              </Tarjeta>
+            </section>
+          ))}
+        </div>
+      )}
 
       {editando && (
         <FormularioProducto
@@ -265,6 +291,30 @@ export default function Stock() {
         />
       )}
     </>
+  )
+}
+
+function Chip({ activo, cantidad, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-200 ${
+        activo
+          ? 'border-perez-600 bg-perez-600 text-white shadow-sm shadow-perez-900/20'
+          : 'border-concreto-200 bg-white text-caucho-700 hover:border-acero-300 hover:bg-concreto-50'
+      }`}
+    >
+      {children}
+      <span
+        className={`rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums ${
+          activo ? 'bg-white/20 text-white' : 'bg-concreto-100 text-acero-500'
+        }`}
+      >
+        {numero(cantidad)}
+      </span>
+    </button>
   )
 }
 
@@ -310,12 +360,6 @@ function FormularioProducto({ producto, onCerrar, onGuardado, gestiona }) {
 
     if (!gestiona) {
       setError('Solo gerencia puede crear o editar productos.')
-      setGuardando(false)
-      return
-    }
-
-    if (!form.id && !imagenFile) {
-      setError('Subí una imagen antes de guardar el producto.')
       setGuardando(false)
       return
     }
@@ -392,7 +436,7 @@ function FormularioProducto({ producto, onCerrar, onGuardado, gestiona }) {
           <Campo etiqueta="Descripción" ayuda="Opcional, para más detalle del producto">
             <input className={estiloInput} {...campo('descripcion')} />
           </Campo>
-          <Campo etiqueta="Imagen" ayuda="Subí una foto desde tu equipo. Solo se acepta carga de archivo.">
+          <Campo etiqueta="Imagen" ayuda="Opcional. Subí una foto desde tu equipo.">
             <input
               type="file"
               accept="image/*"
@@ -418,12 +462,13 @@ function FormularioProducto({ producto, onCerrar, onGuardado, gestiona }) {
             <input type="number" min="0" className={estiloInput} {...campo('stock_minimo')} />
           </Campo>
         </div>
-        {imagenPreview ? (
+
+        {imagenPreview && (
           <div className="rounded-xl border border-concreto-200 p-4">
             <p className="mb-2 text-sm font-medium text-caucho-800">Vista previa</p>
-            <img src={imagenPreview} alt="Preview" className="h-40 w-full rounded-xl object-cover" />
+            <img src={imagenPreview} alt="" className="h-40 w-full rounded-xl object-cover" />
           </div>
-        ) : null}
+        )}
 
         <Aviso>{error}</Aviso>
 
