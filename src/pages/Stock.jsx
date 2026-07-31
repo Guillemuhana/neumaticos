@@ -34,9 +34,21 @@ export default function Stock() {
     if (!datos) return []
     const q = busqueda.trim().toLowerCase()
     if (!q) return datos
-    return datos.filter((p) =>
-      `${p.marca} ${p.medida} ${p.codigo ?? ''} ${p.descripcion ?? ''}`.toLowerCase().includes(q)
-    )
+    return datos.filter((p) => {
+      const texto = [
+        p.marca,
+        p.medida,
+        p.codigo || '',
+        p.descripcion || '',
+        p.precio != null ? String(p.precio) : '',
+        p.costo != null ? String(p.costo) : '',
+        p.stock != null ? String(p.stock) : '',
+        p.stock_minimo != null ? String(p.stock_minimo) : '',
+      ]
+        .join(' ')
+        .toLowerCase()
+      return texto.includes(q)
+    })
   }, [datos, busqueda])
 
   const gestiona = puede('gerencia')
@@ -221,7 +233,7 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
           <Campo etiqueta="Descripción" ayuda="Opcional, para más detalle del producto">
             <input className={estiloInput} {...campo('descripcion')} />
           </Campo>
-          <Campo etiqueta="Imagen" ayuda="Subí una foto o poné un enlace directo." >
+          <Campo etiqueta="Imagen" ayuda="Subí una foto desde tu equipo. Solo se acepta carga de archivo.">
             <input
               type="file"
               accept="image/*"
@@ -231,17 +243,6 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
                 if (!file) return
                 setImagenFile(file)
                 setImagenPreview(URL.createObjectURL(file))
-              }}
-            />
-          </Campo>
-          <Campo etiqueta="URL de imagen" ayuda="Usar solo si ya hay una imagen en la web.">
-            <input
-              className={estiloInput}
-              placeholder="https://..."
-              value={form.imagen_url ?? ''}
-              onChange={(e) => {
-                setForm({ ...form, imagen_url: e.target.value })
-                setImagenPreview(e.target.value)
               }}
             />
           </Campo>
