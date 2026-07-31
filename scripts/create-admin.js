@@ -74,7 +74,12 @@ async function crearAdmin() {
   }
 
   const existing = await fetchJson(`/users?email=${encodeURIComponent(email)}`)
-  const user = Array.isArray(existing) && existing[0]
+  console.log('DEBUG existing response:', JSON.stringify(existing, null, 2))
+  const users = Array.isArray(existing)
+    ? existing
+    : existing?.users ?? []
+  console.log('DEBUG users array length:', users.length)
+  const user = users[0]
 
   if (user) {
     console.log('El usuario ya existe. Actualizando contraseña, metadata y perfil...')
@@ -86,7 +91,14 @@ async function crearAdmin() {
         user_metadata: { nombre, rol: role }
       })
     })
-    await ensurePerfil(user.id, nombre, role)
+    try {
+      await ensurePerfil(user.id, nombre, role)
+    } catch (err) {
+      console.warn(
+        'No se pudo asegurar el perfil en Supabase. Comprueba que la tabla public.perfiles exista y que el esquema esté desplegado.',
+        err.message || err
+      )
+    }
     console.log('Usuario admin actualizado correctamente:', email)
     return
   }
@@ -101,7 +113,19 @@ async function crearAdmin() {
     })
   })
 
-  await ensurePerfil(created.id, nombre, role)
+  const userId = created?.id ?? created?.user?.id
+  if (!userId) {
+    throw new Error('No se pudo obtener el ID del usuario creado.')
+  }
+
+  try {
+    await ensurePerfil(userId, nombre, role)
+  } catch (err) {
+    console.warn(
+      'No se pudo crear el perfil en Supabase. Comprueba que la tabla public.perfiles exista y que el esquema esté desplegado.',
+      err.message || err
+    )
+  }
   console.log('Usuario admin creado correctamente:', email)
 }
 

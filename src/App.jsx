@@ -18,10 +18,23 @@ const Estadisticas = lazy(() => import('./pages/Estadisticas'))
 /* Primera barrera: hay sesión y el perfil está activo.
    La segunda —qué datos devuelve cada consulta— la aplica RLS en Postgres. */
 function RutaPrivada({ children }) {
-  const { sesion, perfil, cargando } = useAuth()
+  const { sesion, perfil, perfilError, cargando } = useAuth()
 
   if (cargando) return <Cargando texto="Verificando tu sesión…" />
   if (!sesion) return <Navigate to="/login" replace />
+
+  if (perfilError)
+    return (
+      <div className="mx-auto max-w-md px-6 py-20">
+        <Aviso tono="atencion">
+          Error cargando tu perfil: {perfilError}
+          <br />
+          Si utilizás Supabase, asegurate de haber aplicado el esquema en{' '}
+          <code>supabase/schema.sql</code> y de que la tabla{' '}
+          <code>perfiles</code> exista.
+        </Aviso>
+      </div>
+    )
 
   if (!perfil)
     return (

@@ -6,16 +6,32 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [sesion, setSesion] = useState(null)
   const [perfil, setPerfil] = useState(null)
+  const [perfilError, setPerfilError] = useState('')
   const [cargando, setCargando] = useState(true)
 
   const traerPerfil = useCallback(async (userId) => {
-    if (!userId) return setPerfil(null)
-    const { data } = await supabase
-      .from('perfiles')
-      .select('id, nombre, rol, activo')
-      .eq('id', userId)
-      .maybeSingle()
-    setPerfil(data ?? null)
+    setPerfilError('')
+    if (!userId) {
+      setPerfil(null)
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('perfiles')
+        .select('id, nombre, rol, activo')
+        .eq('id', userId)
+        .maybeSingle()
+      if (error) throw error
+      setPerfil(data ?? null)
+    } catch (err) {
+      console.error('Error cargando perfil:', err)
+      setPerfil(null)
+      setPerfilError(
+        err.message ||
+          'No se pudo cargar el perfil. Revisa que la tabla perfiles exista y que el esquema de Supabase esté desplegado.'
+      )
+    }
   }, [])
 
   useEffect(() => {
@@ -53,7 +69,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ sesion, perfil, rol, puede, cargando, iniciarSesion, cerrarSesion }}
+      value={{ sesion, perfil, perfilError, rol, puede, cargando, iniciarSesion, cerrarSesion }}
     >
       {children}
     </AuthContext.Provider>
