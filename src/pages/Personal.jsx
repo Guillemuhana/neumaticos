@@ -104,31 +104,32 @@ export default function Personal() {
         delete fallback.email
         delete fallback.documento
         delete fallback.imagen_url
-      if (!empleado.password) return 'La contraseña es obligatoria para un nuevo empleado.'
-      const { data, error } = await supabase.auth.signUp(
-        {
-          email: datosEmpleado.email,
-          password: empleado.password,
-        },
-        {
-          data: {
-            nombre: datosEmpleado.nombre,
-            rol: datosEmpleado.rol,
-            telefono: datosEmpleado.telefono,
-            documento: datosEmpleado.documento,
-          },
-        }
-      )
-      if (error) return error.message
-      const userId = data.user?.id || data?.id
-      if (!userId) return 'No se pudo crear el usuario.'
-      const perfilError = await actualizarPerfil(datosEmpleado, userId)
-      if (perfilError) return perfilError.message
-      return null
+        const { error: fallbackError } = await supabase.from('perfiles').update(fallback).eq('id', id)
+        return fallbackError
+      }
+      return error
     }
 
-    const error = await actualizarPerfil(datosEmpleado, empleado.id)
-    if (error) return error.message
+    if (!empleado.password) return 'La contraseña es obligatoria para un nuevo empleado.'
+    const { data, error: signupError } = await supabase.auth.signUp(
+      {
+        email: datosEmpleado.email,
+        password: empleado.password,
+      },
+      {
+        data: {
+          nombre: datosEmpleado.nombre,
+          rol: datosEmpleado.rol,
+          telefono: datosEmpleado.telefono,
+          documento: datosEmpleado.documento,
+        },
+      }
+    )
+    if (signupError) return signupError.message
+    const userId = data.user?.id || data?.id
+    if (!userId) return 'No se pudo crear el usuario.'
+    const perfilError = await actualizarPerfil(datosEmpleado, userId)
+    if (perfilError) return perfilError.message
     return null
   }
 
@@ -307,6 +308,18 @@ export default function Personal() {
           </Tabla>
         )}
       </Tarjeta>
+
+      {editarEmpleado && (
+        <FormularioEmpleado
+          empleado={editarEmpleado}
+          onCerrar={() => setEditarEmpleado(null)}
+          onGuardado={() => {
+            setEditarEmpleado(null)
+            recargarEmpleados()
+          }}
+          guardarEmpleado={guardarEmpleado}
+        />
+      )}
     </>
   )
 }

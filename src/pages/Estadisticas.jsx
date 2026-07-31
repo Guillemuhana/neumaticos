@@ -78,7 +78,7 @@ export default function Estadisticas() {
       data: {
         ventas: ventas.data,
         ordenes: ordenes.data,
-        productos: productos.data,
+        productos: productosData,
         ventasDetalle: ventasDetalleData,
       },
     }
