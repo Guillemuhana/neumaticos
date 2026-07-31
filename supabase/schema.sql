@@ -61,6 +61,7 @@ create table if not exists clientes (
 create table if not exists productos (
   id            uuid primary key default gen_random_uuid(),
   codigo        text unique,
+  categoria     text not null default 'Cubierta',
   marca         text not null,
   medida        text not null,            -- 205/55 R16
   descripcion   text,
@@ -73,6 +74,7 @@ create table if not exists productos (
   creado_en     timestamptz not null default now()
 );
 
+create index if not exists productos_categoria_idx on productos (categoria);
 create index if not exists productos_marca_idx on productos (marca);
 create index if not exists productos_medida_idx on productos (medida);
 
@@ -205,8 +207,19 @@ drop policy if exists productos_leer on productos;
 create policy productos_leer on productos for select to authenticated using (true);
 
 drop policy if exists productos_escribir on productos;
-create policy productos_escribir on productos for all to authenticated
+create policy productos_escribir on productos for select to authenticated using (true);
+
+drop policy if exists productos_crear on productos;
+create policy productos_crear on productos for insert to authenticated
+  with check (public.es_gerencia());
+
+drop policy if exists productos_actualizar on productos;
+create policy productos_actualizar on productos for update to authenticated
   using (public.es_gerencia()) with check (public.es_gerencia());
+
+drop policy if exists productos_borrar on productos;
+create policy productos_borrar on productos for delete to authenticated
+  using (public.es_gerencia());
 
 -- Ventas: el vendedor ve y carga las suyas; gerencia ve todo.
 drop policy if exists ventas_leer on ventas;

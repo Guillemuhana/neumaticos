@@ -18,7 +18,7 @@ import {
   estiloInput,
 } from '../components/UI'
 
-const vacio = { codigo: '', marca: '', medida: '', precio: '', costo: '', stock: '', stock_minimo: '4' }
+const vacio = { codigo: '', categoria: 'Cubierta', marca: '', medida: '', precio: '', costo: '', stock: '', stock_minimo: '4' }
 
 export default function Stock() {
   const { puede } = useAuth()
@@ -26,7 +26,7 @@ export default function Stock() {
   const [editando, setEditando] = useState(null)
 
   const { datos, cargando, error, recargar } = useConsulta(
-    () => supabase.from('productos').select('*').eq('activo', true).order('marca'),
+    () => supabase.from('productos').select('*').eq('activo', true).order('categoria').order('marca'),
     []
   )
 
@@ -71,7 +71,7 @@ export default function Stock() {
         />
         <input
           className={`${estiloInput} pl-9`}
-          placeholder="Buscar por marca, medida o código…"
+          placeholder="Buscar por categoría, marca, medida, precio o código…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
@@ -109,6 +109,7 @@ export default function Stock() {
                     )}
                     <div>
                       <p className="font-medium">{p.marca}</p>
+                      <p className="text-xs uppercase text-acero-500">{p.categoria || 'Sin categoría'}</p>
                       {p.codigo && <p className="font-mono text-xs text-acero-500">{p.codigo}</p>}
                     </div>
                   </div>
@@ -186,6 +187,18 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
     setGuardando(true)
     setError('')
 
+    if (!gestiona) {
+      setError('Solo gerencia puede crear o editar productos.')
+      setGuardando(false)
+      return
+    }
+
+    if (!form.id && !imagenFile) {
+      setError('Subí una imagen antes de guardar el producto.')
+      setGuardando(false)
+      return
+    }
+
     try {
       const imagen_url = imagenFile
         ? await subirImagen()
@@ -193,6 +206,7 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
 
       const fila = {
         codigo: form.codigo?.trim() || null,
+        categoria: form.categoria || 'Cubierta',
         marca: form.marca.trim(),
         medida: form.medida.trim(),
         descripcion: form.descripcion?.trim() || null,
@@ -208,7 +222,10 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
         : await supabase.from('productos').insert(fila)
 
       if (error) {
-        setError(error.message)
+        const mensaje = error.message.includes('row-level security')
+          ? 'No tenés permisos para crear o editar productos. Verificá que tu usuario tenga rol gerencia en Supabase.'
+          : error.message
+        setError(mensaje)
         setGuardando(false)
       } else onGuardado()
     } catch (err) {
@@ -221,6 +238,12 @@ function FormularioProducto({ producto, onCerrar, onGuardado }) {
     <Modal titulo={form.id ? 'Editar artículo' : 'Nuevo artículo'} onCerrar={onCerrar}>
       <form onSubmit={guardar} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
+          <Campo etiqueta="Categoría" ayuda="Elegí si es cubierta o repuesto.">
+            <select required className={estiloInput} {...campo('categoria')}>
+              <option value="Cubierta">Cubierta</option>
+              <option value="Repuesto">Repuesto</option>
+            </select>
+          </Campo>
           <Campo etiqueta="Marca">
             <input required className={estiloInput} placeholder="Pirelli" {...campo('marca')} />
           </Campo>

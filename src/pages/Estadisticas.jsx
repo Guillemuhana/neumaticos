@@ -31,31 +31,51 @@ export default function Estadisticas() {
   const { datos, cargando, error } = useConsulta(async () => {
     const desde = startOfDay(subDays(new Date(), dias - 1)).toISOString()
 
-    const [ventas, ordenes, productos] = await Promise.all([
+    const [ventas, ordenes, productos, ventasDetalle] = await Promise.all([
       supabase
         .from('ventas')
         .select('total, creada_en, perfiles(nombre)')
         .eq('estado', 'confirmada')
         .gte('creada_en', desde),
       supabase.from('ordenes').select('estado, creada_en, perfiles(nombre)').gte('creada_en', desde),
-      supabase.from('productos').select('stock, costo').eq('activo', true),
+      supabase.from('productos').select('stock, costo, categoria').eq('activo', true),
+      supabase
+        .from('venta_items')
+        .select('cantidad, precio_unitario, productos(marca, medida, categoria), ventas(creada_en, estado)')
+        .eq('ventas.estado', 'confirmada')
+        .gte('ventas.creada_en', desde),
     ])
 
-    const fallo = ventas.error || ordenes.error || productos.error
+    const fallo = ventas.error || ordenes.error || productos.error || ventasDetalle.error
     if (fallo) return { error: fallo }
 
-    return { data: { ventas: ventas.data, ordenes: ordenes.data, productos: productos.data } }
+    return {
+      data: {
+        ventas: ventas.data,
+        ordenes: ordenes.data,
+        productos: productos.data,
+        ventasDetalle: ventasDetalle.data,
+      },
+    }
   }, [dias])
 
   if (cargando) return <Cargando texto="Calculando…" alto="min-h-[60vh]" />
   if (error) return <Aviso>{error}</Aviso>
 
-  const { ventas, ordenes, productos } = datos
+  const { ventas, ordenes, productos, ventasDetalle } = datos
 
   const facturado = ventas.reduce((a, v) => a + Number(v.total), 0)
   const ticket = ventas.length ? facturado / ventas.length : 0
   const inventario = productos.reduce((a, p) => a + p.stock * Number(p.costo), 0)
+  const inventarioCubiertas = productos
+    .filter((p) => p.categoria === 'Cubierta')
+    .reduce((a, p) => a + p.stock * Number(p.costo), 0)
+  const inventarioRepuestos = productos
+    .filter((p) => p.categoria === 'Repuesto')
+    .reduce((a, p) => a + p.stock * Number(p.costo), 0)
   const entregadas = ordenes.filter((o) => o.estado === 'entregada').length
+  const unidadesVendidas = datos.ventasDetalle.reduce((a, item) => a + item.cantidad, 0)
+  const articlesPorVenta = ventas.length ? unidadesVendidas / ventas.length : 0
 
   /* Serie diaria completa, con los días sin ventas en cero: si se saltaran,
      el eje mentiría sobre el ritmo de facturación. */
@@ -94,21 +114,59 @@ export default function Estadisticas() {
     (a, b) => b.cantidad - a.cantidad
   )
 
+  const porCategoria = (() => {
+    const mapa = new Map()
+    datos.ventasDetalle.forEach((item) => {
+      const cat = item.productos?.categoria || 'Sin categoría'
+      const total = Number(item.cantidad) * Number(item.precio_unitario)
+      mapa.set(cat, (mapa.get(cat) ?? 0) + total)
+    })
+    return [...mapa.entries()]
+      .map(([categoria, total]) => ({ categoria, total }))
+      .sort((a, b) => b.total - a.total)
+  })()
+
+  const topProductos = (() => {
+    const mapa = new Map()
+    datos.ventasDetalle.forEach((item) => {
+      const clave = `${item.productos?.marca ?? 'Sin marca'} ${item.productos?.medida ?? ''}`.trim()
+      const total = Number(item.cantidad) * Number(item.precio_unitario)
+      mapa.set(clave, (mapa.get(clave) ?? 0) + total)
+    })
+    return [...mapa.entries()]
+      .map(([producto, total]) => ({ producto, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+  })()
+
   const generarCsv = () => {
     const filas = [
       ['Métrica', 'Valor'],
       ['Facturado', plata(facturado)],
       ['Ticket promedio', plata(ticket)],
+      ['Ventas confirmadas', numero(ventas.length)],
+      ['Unidades vendidas', numero(unidadesVendidas)],
+      ['Artículos por venta', numero(articlesPorVenta.toFixed(2))],
       ['Órdenes entregadas', numero(entregadas)],
       ['Valor de inventario', plata(inventario)],
+      ['Inventario cubiertas', plata(inventarioCubiertas)],
+      ['Inventario repuestos', plata(inventarioRepuestos)],
       [],
       ['Ventas por vendedor'],
       ['Vendedor', 'Facturado'],
       ...porVendedor.map((v) => [v.nombre, plata(v.total)]),
       [],
+      ['Ventas por categoría'],
+      ['Categoría', 'Facturado'],
+      ...porCategoria.map((c) => [c.categoria, plata(c.total)]),
+      [],
       ['Órdenes por mecánico'],
       ['Mecánico', 'Órdenes'],
       ...porMecanico.map((m) => [m.nombre, numero(m.cantidad)]),
+      [],
+      ['Top productos por facturación'],
+      ['Producto', 'Facturado'],
+      ...topProductos.map((p) => [p.producto, plata(p.total)]),
     ]
 
     return filas.map((fila) => fila.map((celda) => `"${String(celda ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
