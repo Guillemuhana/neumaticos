@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, Boxes, ImageOff, Plus, Search, X } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
-import { supabase } from '../lib/supabase'
+import { errorDeStorage, supabase } from '../lib/supabase'
 import { numero, plata } from '../lib/formato'
 import {
   Aviso,
@@ -376,16 +376,7 @@ function FormularioProducto({ producto, onCerrar, onGuardado, gestiona }) {
       .from('productos')
       .upload(nombre, imagenFile, { cacheControl: '3600', upsert: true })
 
-    /* Mismo caso que en Personal: sin el bucket creado, Supabase solo dice
-       "Bucket not found". Ver supabase/storage.sql. */
-    if (errorSubida) {
-      if (errorSubida.message?.toLowerCase().includes('bucket not found')) {
-        throw new Error(
-          'Falta el bucket «productos» en Supabase Storage. Corré supabase/storage.sql en el SQL Editor.'
-        )
-      }
-      throw errorSubida
-    }
+    if (errorSubida) throw errorDeStorage(errorSubida, 'productos')
 
     const { data: urlData } = supabase.storage.from('productos').getPublicUrl(nombre)
     return urlData.publicUrl

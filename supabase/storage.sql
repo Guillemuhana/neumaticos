@@ -25,3 +25,12 @@ create policy storage_actualizar on storage.objects for update to authenticated
 drop policy if exists storage_borrar on storage.objects;
 create policy storage_borrar on storage.objects for delete to authenticated
   using (bucket_id in ('empleados', 'productos'));
+
+-- Verificación. Tienen que salir los 2 buckets en public=true y 4 políticas.
+-- Crear el bucket desde el panel NO crea las políticas: sin ellas, subir un
+-- archivo falla con "new row violates row-level security policy".
+select id, public from storage.buckets where id in ('empleados', 'productos');
+select policyname, cmd from pg_policies
+where schemaname = 'storage' and tablename = 'objects'
+  and policyname like 'storage_%'
+order by policyname;

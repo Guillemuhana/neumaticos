@@ -2,7 +2,7 @@ import { LogIn, LogOut, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
-import { supabase } from '../lib/supabase'
+import { errorDeStorage, supabase } from '../lib/supabase'
 import { fecha } from '../lib/formato'
 import {
   Aviso,
@@ -360,16 +360,7 @@ function FormularioEmpleado({ empleado, onCerrar, onGuardado, guardarEmpleado })
       .from('empleados')
       .upload(nombre, imagenFile, { cacheControl: '3600', upsert: true })
 
-    /* El bucket no se crea solo: si falta, el mensaje crudo de Supabase
-       ("Bucket not found") no dice qué hacer. Ver supabase/storage.sql. */
-    if (errorSubida) {
-      if (errorSubida.message?.toLowerCase().includes('bucket not found')) {
-        throw new Error(
-          'Falta el bucket «empleados» en Supabase Storage. Corré supabase/storage.sql en el SQL Editor.'
-        )
-      }
-      throw errorSubida
-    }
+    if (errorSubida) throw errorDeStorage(errorSubida, 'empleados')
 
     const { data: urlData } = supabase.storage.from('empleados').getPublicUrl(nombre)
     return urlData.publicUrl
