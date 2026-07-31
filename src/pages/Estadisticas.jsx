@@ -46,6 +46,13 @@ export default function Estadisticas() {
         .gte('ventas.creada_en', desde),
     ])
 
+    let productosData = productos.data
+    if (productos.error?.message?.includes('column "categoria" does not exist')) {
+      const fallbackProductos = await supabase.from('productos').select('stock, costo').eq('activo', true)
+      if (fallbackProductos.error) return { error: fallbackProductos.error }
+      productosData = fallbackProductos.data
+    }
+
     let ventasDetalleData = ventasDetalle.data
     if (ventasDetalle.error?.message?.includes('column "categoria" does not exist')) {
       const fallback = await supabase
@@ -57,7 +64,11 @@ export default function Estadisticas() {
       ventasDetalleData = fallback.data
     }
 
-    const fallo = ventas.error || ordenes.error || productos.error || (ventasDetalle.error && !ventasDetalle.error.message.includes('column "categoria" does not exist'))
+    const fallo =
+      ventas.error ||
+      ordenes.error ||
+      productos.error?.message && !productos.error.message.includes('column "categoria" does not exist') ||
+      (ventasDetalle.error && !ventasDetalle.error.message.includes('column "categoria" does not exist'))
     if (fallo) return { error: fallo }
 
     return {
@@ -82,7 +93,7 @@ export default function Estadisticas() {
     .filter((p) => p.categoria === 'Cubierta')
     .reduce((a, p) => a + p.stock * Number(p.costo), 0)
   const inventarioRepuestos = productos
-    .filter((p) => p.categoria === 'Repuesto')
+    .filter((p) => p.categoria && p.categoria !== 'Cubierta')
     .reduce((a, p) => a + p.stock * Number(p.costo), 0)
   const entregadas = ordenes.filter((o) => o.estado === 'entregada').length
   const unidadesVendidas = datos.ventasDetalle.reduce((a, item) => a + item.cantidad, 0)

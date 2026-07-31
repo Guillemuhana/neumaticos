@@ -39,7 +39,7 @@ export default function Stock() {
   const [editando, setEditando] = useState(null)
 
   const { datos, cargando, error, recargar } = useConsulta(
-    () => supabase.from('productos').select('*').eq('activo', true).order('categoria').order('marca'),
+    () => supabase.from('productos').select('*').eq('activo', true).order('marca'),
     []
   )
 
