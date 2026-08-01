@@ -10,13 +10,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Boxes, ClipboardList, Download, Receipt, Share2, Wallet } from 'lucide-react'
+import { Boxes, ClipboardList, Download, Receipt, Share2, Wallet, Wrench } from 'lucide-react'
 import { eachDayOfInterval, format, startOfDay, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { numero, plata } from '../lib/formato'
-import { etapaDe } from '../lib/taller'
+import { ETAPAS, etapaDe } from '../lib/taller'
 import { Aviso, Boton, Cargando, Encabezado, Metrica } from '../components/UI'
 import { MARCA, PanelGrafico, Tooltip, ejeComun } from '../components/Grafico'
 
@@ -107,7 +107,12 @@ export default function Estadisticas() {
   const inventarioRepuestos = productos
     .filter((p) => p.categoria && p.categoria !== 'Cubierta')
     .reduce((a, p) => a + p.stock * Number(p.costo), 0)
-  const entregadas = ordenes.filter((o) => o.estado === 'entregada').length
+  /* El taller es la otra mitad del negocio: lo que entra por órdenes no
+     aparece en `ventas` hasta que se entrega, así que se mide aparte. */
+  const entregadas = ordenes.filter((o) => o.estado === 'entregada')
+  const abiertas = ordenes.filter((o) => o.estado !== 'entregada')
+  const facturadoTaller = entregadas.reduce((a, o) => a + Number(o.total), 0)
+  const sinAsignar = abiertas.filter((o) => !o.mecanico_id).length
   const unidadesVendidas = datos.ventasDetalle.reduce((a, item) => a + item.cantidad, 0)
   const articlesPorVenta = ventas.length ? unidadesVendidas / ventas.length : 0
 
@@ -127,6 +132,11 @@ export default function Estadisticas() {
       .reduce((a, v) => a + Number(v.total), 0)
     return { dia: format(d, 'd MMM', { locale: es }), total }
   })
+
+  /* El UUID entero ensancha la tabla hasta empujar las columnas que importan
+     fuera de la vista. Ocho caracteres alcanzan para cotejar contra la orden;
+     el CSV se lleva el identificador completo. */
+  const corto = (id) => (id ? String(id).slice(0, 8) : '—')
 
   const agrupar = (filas, obtener) => {
     const mapa = new Map()
@@ -151,6 +161,14 @@ export default function Estadisticas() {
   const porMecanico = agrupar(ordenes, (o) => o.mecanico?.nombre).sort(
     (a, b) => b.cantidad - a.cantidad
   )
+
+  /* Las etapas salen de ETAPAS y no de los datos: una columna vacía también
+     dice algo —"no hay nada esperando"— y si se derivara de las filas
+     desaparecería justo cuando importa verla en cero. */
+  const porEtapa = ETAPAS.map((e) => ({
+    etapa: e.texto,
+    cantidad: ordenes.filter((o) => o.estado === e.valor).length,
+  }))
 
   const porCategoria = (() => {
     const mapa = new Map()
@@ -187,7 +205,10 @@ export default function Estadisticas() {
       ['Trabajos hoy', numero(ordenesHoy.length)],
       ['Unidades vendidas', numero(unidadesVendidas)],
       ['Artículos por venta', numero(articlesPorVenta.toFixed(2))],
-      ['Órdenes entregadas', numero(entregadas)],
+      ['Órdenes entregadas', numero(entregadas.length)],
+      ['Facturado en taller', plata(facturadoTaller)],
+      ['Órdenes abiertas', numero(abiertas.length)],
+      ['Órdenes sin mecánico asignado', numero(sinAsignar)],
       ['Valor de inventario', plata(inventario)],
       ['Inventario cubiertas', plata(inventarioCubiertas)],
       ['Inventario repuestos', plata(inventarioRepuestos)],
@@ -219,6 +240,10 @@ export default function Estadisticas() {
       ['Mecánico', 'Órdenes'],
       ...porMecanico.map((m) => [m.nombre, numero(m.cantidad)]),
       [],
+      ['Órdenes por etapa'],
+      ['Etapa', 'Órdenes'],
+      ...porEtapa.map((e) => [e.etapa, numero(e.cantidad)]),
+      [],
       ['Top productos por facturación'],
       ['Producto', 'Facturado'],
       ...topProductos.map((p) => [p.producto, plata(p.total)]),
@@ -240,7 +265,7 @@ export default function Estadisticas() {
   }
 
   const compartirReporte = async () => {
-    const texto = `Reporte de gestión:\nFacturado: ${plata(facturado)}\nTicket promedio: ${plata(ticket)}\nVentas hoy: ${numero(ventasHoy.length)}\nTrabajos hoy: ${numero(ordenesHoy.length)}\nÓrdenes entregadas: ${numero(entregadas)}\nValor de inventario: ${plata(inventario)}`
+    const texto = `Reporte de gestión:\nFacturado: ${plata(facturado)}\nTicket promedio: ${plata(ticket)}\nVentas hoy: ${numero(ventasHoy.length)}\nFacturado en taller: ${plata(facturadoTaller)}\nÓrdenes entregadas: ${numero(entregadas.length)}\nÓrdenes abiertas: ${numero(abiertas.length)}\nValor de inventario: ${plata(inventario)}`
 
     if (navigator.share) {
       await navigator.share({
@@ -288,8 +313,15 @@ export default function Estadisticas() {
         <Metrica icono={Receipt} tono="marca" titulo="Facturado" valor={plata(facturado)} pie={`${ventas.length} ventas confirmadas`} />
         <Metrica icono={Wallet} titulo="Ticket promedio" valor={plata(ticket)} pie="Por venta confirmada" />
         <Metrica icono={Receipt} titulo="Ventas hoy" valor={numero(ventasHoy.length)} pie="Ventas confirmadas en el día" />
-        <Metrica icono={ClipboardList} tono="conforme" titulo="Trabajos hoy" valor={numero(ordenesHoy.length)} pie="Órdenes de taller del día" />
-        <Metrica icono={ClipboardList} tono="conforme" titulo="Órdenes entregadas" valor={numero(entregadas)} pie={`De ${ordenes.length} creadas`} />
+        <Metrica icono={Wrench} tono="marca" titulo="Facturado en taller" valor={plata(facturadoTaller)} pie={`${entregadas.length} órdenes entregadas`} />
+        <Metrica
+          icono={ClipboardList}
+          tono={abiertas.length ? 'atencion' : 'conforme'}
+          titulo="Órdenes abiertas"
+          valor={numero(abiertas.length)}
+          pie={sinAsignar ? `${sinAsignar} sin mecánico asignado` : 'Todas con mecánico'}
+        />
+        <Metrica icono={ClipboardList} titulo="Trabajos hoy" valor={numero(ordenesHoy.length)} pie="Órdenes abiertas en el día" />
         <Metrica icono={Boxes} titulo="Valor de inventario" valor={plata(inventario)} pie="Stock actual a costo" />
       </div>
 
@@ -347,6 +379,24 @@ export default function Estadisticas() {
         </PanelGrafico>
 
         <PanelGrafico
+          titulo="En qué etapa está el trabajo"
+          detalle="Órdenes del período por etapa del circuito."
+          datos={porEtapa}
+          columnas={['Etapa', 'Órdenes']}
+          filas={porEtapa.map((e) => [e.etapa, numero(e.cantidad)])}
+        >
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={porEtapa} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+              <CartesianGrid stroke="#E5E7E2" vertical={false} />
+              <XAxis dataKey="etapa" {...ejeComun} interval={0} />
+              <YAxis {...ejeComun} width={40} allowDecimals={false} />
+              <TooltipRecharts cursor={{ fill: '#F2F3F0' }} content={<Tooltip formato={numero} />} />
+              <Bar dataKey="cantidad" fill={MARCA} barSize={40} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </PanelGrafico>
+
+        <PanelGrafico
           titulo="Productividad del taller"
           detalle="Órdenes tomadas por mecánico."
           datos={porMecanico}
@@ -372,7 +422,7 @@ export default function Estadisticas() {
           datos={ventasHoy}
           columnas={['Venta', 'Vendedor', 'Estado', 'Total', 'Hora']}
           filas={ventasHoy.map((v) => [
-            v.id ?? '—',
+            corto(v.id),
             v.perfiles?.nombre ?? '—',
             v.estado,
             plata(v.total),
@@ -386,7 +436,7 @@ export default function Estadisticas() {
           datos={ordenesHoy}
           columnas={['Orden', 'Vehículo', 'Patente', 'Mecánico', 'Etapa', 'Importe']}
           filas={ordenesHoy.map((o) => [
-            o.id ?? '—',
+            corto(o.id),
             o.vehiculo || '—',
             o.patente || '—',
             o.mecanico?.nombre || 'Sin asignar',

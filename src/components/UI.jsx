@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 /* Piezas de interfaz compartidas. Usan los tokens de index.css:
@@ -200,18 +201,26 @@ export function Modal({ titulo, onCerrar, children }) {
     }
   }, [onCerrar])
 
-  return (
+  /* Va montado en <body> y no donde se lo escribe. `position: fixed` se
+     resuelve contra el ancestro que tenga transform, filter o animación de
+     esos, y el layout anima cada pantalla al entrar: adentro de la página el
+     diálogo se centraba contra el alto del contenido, así que en una pantalla
+     larga aparecía arriba de todo y con la cabecera fuera de la ventana. */
+  return createPortal(
     <div
       className="aparecer fixed inset-0 z-50 flex items-end justify-center bg-caucho-950/40 p-4 backdrop-blur-[2px] sm:items-center"
       onMouseDown={(e) => e.target === e.currentTarget && onCerrar()}
     >
+      {/* Columna con la cabecera fija y el cuerpo scrolleando aparte: con un
+          `sticky` adentro de un solo contenedor, el título se iba de vista en
+          los formularios largos. */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
-        className="entrar max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl"
+        className="entrar flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-concreto-200 bg-white px-5 py-3.5">
+        <div className="flex shrink-0 items-center justify-between border-b border-concreto-200 bg-white px-5 py-3.5">
           <h2 className="display text-base font-bold">{titulo}</h2>
           <button
             onClick={onCerrar}
@@ -221,8 +230,9 @@ export function Modal({ titulo, onCerrar, children }) {
             <X size={18} />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="overflow-y-auto p-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
