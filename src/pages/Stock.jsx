@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { errorDeStorage, supabase } from '../lib/supabase'
 import { numero, plata } from '../lib/formato'
+import FichaProducto from '../components/stock/FichaProducto'
 import {
   Aviso,
   Boton,
@@ -48,6 +49,9 @@ export default function Stock() {
   const [categoria, setCategoria] = useState('todas')
   const [soloCriticos, setSoloCriticos] = useState(false)
   const [editando, setEditando] = useState(null)
+  /* La ficha es para el mostrador: se busca el repuesto y se le muestra la
+     pantalla al cliente, así que abre con un toque en la fila. */
+  const [viendo, setViendo] = useState(null)
 
   const { datos, cargando, error, recargar } = useConsulta(
     () => supabase.from('productos').select('*').eq('activo', true).order('marca'),
@@ -222,19 +226,26 @@ export default function Stock() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="responsive-table w-full text-sm sm:min-w-[48rem]">
+              <table className="responsive-table w-full text-sm sm:min-w-[40rem]">
                 {/* El encabezado queda fijo: en una lista larga, saber qué
                     columna se está mirando importa más que ganar 36px. */}
                 <thead className="hidden sm:table-header-group">
                   <tr className="border-b border-concreto-200 bg-white text-left">
-                    {['Artículo', 'Categoría', 'Medida', 'Precio', 'Stock'].map((c, i) => (
+                    {[
+                      { texto: 'Artículo' },
+                      { texto: 'Categoría' },
+                      /* La medida sale de la tabla en pantallas angostas: es
+                         lo que empujaba precio y stock fuera de la vista.
+                         Abajo del breakpoint se muestra junto a la marca. */
+                      { texto: 'Medida', extra: 'hidden lg:table-cell' },
+                      { texto: 'Precio', extra: 'text-right' },
+                      { texto: 'Stock', extra: 'text-right' },
+                    ].map(({ texto, extra = '' }) => (
                       <th
-                        key={c}
-                        className={`sticky top-0 bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-acero-500 ${
-                          i >= 3 ? 'text-right' : ''
-                        }`}
+                        key={texto}
+                        className={`sticky top-0 bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-acero-500 ${extra}`}
                       >
-                        {c}
+                        {texto}
                       </th>
                     ))}
                     {gestiona && <th className="sticky top-0 bg-white px-4 py-2.5" />}
@@ -245,7 +256,20 @@ export default function Stock() {
                   {filtrados.map((p) => {
                     const critico = p.stock <= p.stock_minimo
                     return (
-                      <tr key={p.id} className="group transition-colors hover:bg-concreto-50">
+                      <tr
+                        key={p.id}
+                        className="group cursor-pointer transition-colors hover:bg-concreto-50"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Ver ${p.marca} ${p.medida}`}
+                        onClick={() => setViendo(p)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setViendo(p)
+                          }
+                        }}
+                      >
                         <td data-label="Artículo" className="px-4 py-2.5">
                           <div className="flex items-center gap-3">
                             {p.imagen_url ? (
@@ -260,7 +284,18 @@ export default function Stock() {
                               </span>
                             )}
                             <div className="min-w-0">
-                              <p className="truncate font-semibold text-caucho-900">{p.marca}</p>
+                              <p className="truncate font-semibold text-caucho-900">
+                                {p.marca}
+                                {/* La medida se repite acá para poder esconder
+                                    su columna en pantallas angostas, donde era
+                                    lo que empujaba el precio fuera de la vista. */}
+                                {p.medida && (
+                                  <span className="font-mono font-normal text-acero-500 lg:hidden">
+                                    {' '}
+                                    {p.medida}
+                                  </span>
+                                )}
+                              </p>
                               <p className="truncate text-xs text-acero-500">
                                 {p.descripcion || '—'}
                                 {p.codigo && <span className="font-mono"> · {p.codigo}</span>}
@@ -271,7 +306,10 @@ export default function Stock() {
                         <td data-label="Categoría" className="px-4 py-2.5 text-acero-500">
                           {p.categoria || 'Otro repuesto'}
                         </td>
-                        <td data-label="Medida" className="px-4 py-2.5 font-mono text-caucho-700">
+                        <td
+                          data-label="Medida"
+                          className="hidden px-4 py-2.5 font-mono text-caucho-700 lg:table-cell"
+                        >
                           {p.medida}
                         </td>
                         <td data-label="Precio" className="px-4 py-2.5 font-semibold tabular-nums sm:text-right">
@@ -294,7 +332,12 @@ export default function Stock() {
                         {gestiona && (
                           <td data-label="Acciones" className="px-4 py-2.5 text-right">
                             <button
-                              onClick={() => setEditando(p)}
+                              /* La fila entera abre la ficha: sin frenar el
+                                 evento, editar abriría las dos cosas. */
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditando(p)
+                              }}
                               className="rounded-lg px-2.5 py-1 text-sm font-semibold text-acero-500 transition-colors hover:bg-concreto-200 hover:text-caucho-900 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
                             >
                               Editar
@@ -316,6 +359,18 @@ export default function Stock() {
           </>
         )}
       </Tarjeta>
+
+      {viendo && (
+        <FichaProducto
+          producto={viendo}
+          gestiona={gestiona}
+          onCerrar={() => setViendo(null)}
+          onEditar={() => {
+            setEditando(viendo)
+            setViendo(null)
+          }}
+        />
+      )}
 
       {editando && (
         <FormularioProducto
