@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Search, Plus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Search, Plus, Wrench } from 'lucide-react'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { Aviso, Boton, Campo, Cargando, Encabezado, Modal, Tabla, Tarjeta, Vacio, estiloInput } from '../components/UI'
@@ -7,8 +8,13 @@ import { Aviso, Boton, Campo, Cargando, Encabezado, Modal, Tabla, Tarjeta, Vacio
 const vacio = { nombre: '', telefono: '', email: '', documento: '' }
 
 export default function Clientes() {
+  const navigate = useNavigate()
   const [busqueda, setBusqueda] = useState('')
   const [editando, setEditando] = useState(null)
+
+  /* El alta de un cliente casi nunca es un fin en sí mismo: viene alguien con
+     el auto. Desde acá se sigue derecho a la orden, con el cliente ya puesto. */
+  const abrirOrden = (cliente) => navigate('/taller', { state: { nueva: true, cliente } })
 
   const { datos, cargando, error, recargar } = useConsulta(
     () => supabase.from('clientes').select('*').order('nombre'),
@@ -76,9 +82,18 @@ export default function Clientes() {
                   {c.documento ?? '—'}
                 </td>
                 <td data-label="Acciones" className="px-4 py-3 text-right">
-                  <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(c)}>
-                    Editar
-                  </Boton>
+                  <div className="flex justify-end gap-1">
+                    <Boton
+                      variante="secundario"
+                      className="px-2 py-1"
+                      onClick={() => abrirOrden(c)}
+                    >
+                      <Wrench size={14} /> Nueva orden
+                    </Boton>
+                    <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(c)}>
+                      Editar
+                    </Boton>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -90,9 +105,10 @@ export default function Clientes() {
         <FormularioCliente
           cliente={editando}
           onCerrar={() => setEditando(null)}
-          onGuardado={() => {
+          onGuardado={(creado, seguirAOrden) => {
             setEditando(null)
-            recargar()
+            if (seguirAOrden) abrirOrden(creado)
+            else recargar()
           }}
         />
       )}
@@ -110,7 +126,10 @@ function FormularioCliente({ cliente, onCerrar, onGuardado }) {
     onChange: (e) => setForm({ ...form, [k]: e.target.value }),
   })
 
-  const guardar = async (e) => {
+  /* `seguirAOrden` viaja como argumento y no por estado: si se guardara con
+     setState, el submit leería el valor anterior y el botón haría lo que
+     hizo el de al lado la vez pasada. */
+  const guardar = async (e, seguirAOrden = false) => {
     e.preventDefault()
     setGuardando(true)
     setError('')
@@ -122,14 +141,14 @@ function FormularioCliente({ cliente, onCerrar, onGuardado }) {
       documento: form.documento?.trim() || null,
     }
 
-    const { error } = form.id
-      ? await supabase.from('clientes').update(fila).eq('id', form.id)
-      : await supabase.from('clientes').insert(fila)
+    const { data, error } = form.id
+      ? await supabase.from('clientes').update(fila).eq('id', form.id).select().single()
+      : await supabase.from('clientes').insert(fila).select().single()
 
     if (error) {
       setError(error.message)
       setGuardando(false)
-    } else onGuardado()
+    } else onGuardado(data, seguirAOrden)
   }
 
   return (
@@ -150,13 +169,24 @@ function FormularioCliente({ cliente, onCerrar, onGuardado }) {
 
         <Aviso>{error}</Aviso>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Boton type="button" variante="secundario" onClick={onCerrar}>
             Cancelar
           </Boton>
-          <Boton type="submit" disabled={guardando}>
+          <Boton type="submit" variante={form.id ? 'primario' : 'secundario'} disabled={guardando}>
             {guardando ? 'Guardando…' : 'Guardar'}
           </Boton>
+          {/* El caso normal en el mostrador: se carga al cliente porque llegó
+              con el auto, así que el camino largo es guardar y nada más. */}
+          {!form.id && (
+            <Boton
+              type="button"
+              disabled={guardando || !form.nombre.trim()}
+              onClick={(e) => guardar(e, true)}
+            >
+              <Wrench size={15} /> Guardar y crear orden
+            </Boton>
+          )}
         </div>
       </form>
     </Modal>

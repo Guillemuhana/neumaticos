@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { ClipboardList, History, Plus } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
@@ -16,7 +17,13 @@ import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Tarjeta, Vacio } from '..
 
 export default function Taller() {
   const { sesion, rol } = useAuth()
-  const [creando, setCreando] = useState(false)
+  const ubicacion = useLocation()
+
+  /* El proceso empieza en el mostrador, no acá: desde el panel y desde la
+     ficha de un cliente se entra con la orden ya abierta —y, si vino de un
+     cliente, con el paso 1 completo. */
+  const [creando, setCreando] = useState(Boolean(ubicacion.state?.nueva))
+  const clienteInicial = ubicacion.state?.cliente ?? null
   const [abiertaId, setAbiertaId] = useState(null)
   const [verHistorial, setVerHistorial] = useState(false)
 
@@ -147,6 +154,7 @@ export default function Taller() {
 
       {creando && (
         <NuevaOrden
+          clienteInicial={clienteInicial}
           onCerrar={() => setCreando(false)}
           onGuardada={(id) => {
             /* Abrir la orden recién creada deja el próximo paso a la vista en

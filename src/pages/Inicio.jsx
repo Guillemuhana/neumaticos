@@ -1,10 +1,10 @@
-import { AlertTriangle, ClipboardList, Package, Receipt, TrendingUp } from 'lucide-react'
+import { AlertTriangle, ClipboardList, Package, Plus, Receipt, TrendingUp } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { plata } from '../lib/formato'
-import { Aviso, Cargando, Encabezado, Metrica, Tarjeta } from '../components/UI'
+import { Aviso, Boton, Cargando, Encabezado, Metrica, Tarjeta } from '../components/UI'
 
 const inicioDelDia = () => {
   const d = new Date()
@@ -55,7 +55,15 @@ export default function Inicio() {
       <Encabezado
         titulo={`Hola, ${perfil?.nombre?.split(' ')[0] ?? ''}`}
         detalle="Lo que está pasando hoy en el local."
-      />
+      >
+        {/* Todo empieza cuando entra un cliente: el arranque del circuito va
+            acá, en la primera pantalla, y no escondido dentro de Taller. */}
+        {rol !== 'mecanico' && (
+          <Boton onClick={() => navigate('/taller', { state: { nueva: true } })}>
+            <Plus size={16} /> Nueva orden de trabajo
+          </Boton>
+        )}
+      </Encabezado>
 
       <div className="cascada grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metrica

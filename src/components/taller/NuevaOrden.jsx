@@ -20,10 +20,11 @@ const VACIO = {
   notas: '',
 }
 
-export default function NuevaOrden({ onCerrar, onGuardada }) {
+export default function NuevaOrden({ clienteInicial = null, onCerrar, onGuardada }) {
   const { sesion } = useAuth()
   const [form, setForm] = useState(VACIO)
-  const [cliente, setCliente] = useState(null)
+  /* Si se llega desde la ficha de un cliente, el paso 1 ya está resuelto. */
+  const [cliente, setCliente] = useState(clienteInicial)
   const [mecanicoId, setMecanicoId] = useState('')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
