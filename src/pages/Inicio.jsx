@@ -48,7 +48,7 @@ export default function Inicio() {
   /* Todo lo que entró y todavía no salió: mientras no esté entregada, el
      vehículo sigue en el taller aunque nadie le esté poniendo las manos. */
   const abiertas = datos.ordenes.filter((o) => o.estado !== 'entregada')
-  const esperandoPlan = datos.ordenes.filter((o) => o.estado === 'recepcion')
+  const esperandoTaller = datos.ordenes.filter((o) => o.estado === 'pendiente')
 
   return (
     <>
@@ -80,11 +80,11 @@ export default function Inicio() {
           titulo="Vehículos en taller"
           valor={abiertas.length}
           pie={
-            esperandoPlan.length
-              ? `${esperandoPlan.length} esperando presupuesto`
+            esperandoTaller.length
+              ? `${esperandoTaller.length} sin empezar`
               : 'Órdenes sin entregar'
           }
-          tono={esperandoPlan.length ? 'atencion' : 'neutro'}
+          tono={esperandoTaller.length ? 'atencion' : 'neutro'}
           onClick={() => navigate('/taller')}
           className="cursor-pointer"
         />

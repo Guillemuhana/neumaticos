@@ -9,8 +9,8 @@ import { Aviso, Boton, Campo, Modal, estiloInput } from '../UI'
    vehículo dejó, qué dice que le pasa y quién lo va a atender.
 
    El mecánico se elige acá y no más adelante porque en el taller se decide
-   apenas entra el auto. La orden igual nace en 'recepcion': valorizarla es
-   trabajo de administración y el esquema no deja saltearse ese paso. */
+   apenas entra el auto. La orden nace en 'pendiente' y ya aparece en el
+   tablero del taller: valorizarla se puede hacer después, desde el panel. */
 
 const VACIO = {
   vehiculo: '',
@@ -66,7 +66,7 @@ export default function NuevaOrden({ clienteInicial = null, onCerrar, onGuardada
         kilometraje: form.kilometraje === '' ? null : Number(form.kilometraje),
         falla_reportada: form.falla_reportada.trim() || null,
         notas: form.notas.trim() || null,
-        estado: 'recepcion',
+        estado: 'pendiente',
       })
       .select('id')
       .single()
@@ -108,11 +108,14 @@ export default function NuevaOrden({ clienteInicial = null, onCerrar, onGuardada
               <input type="number" min="0" className={estiloInput} placeholder="82000" {...campo('kilometraje')} />
             </Campo>
 
-            <Campo etiqueta="Falla reportada" ayuda="Lo que dice el cliente, con sus palabras.">
+            <Campo
+              etiqueta="Qué pide el cliente"
+              ayuda="Lo que viene a resolver, con sus palabras. El detalle con precios se carga después."
+            >
               <textarea
                 rows={3}
                 className={estiloInput}
-                placeholder="Ruido en el tren delantero al doblar…"
+                placeholder="Ruido en el tren delantero al doblar. Quiere alineación y balanceo."
                 {...campo('falla_reportada')}
               />
             </Campo>
@@ -156,7 +159,7 @@ export default function NuevaOrden({ clienteInicial = null, onCerrar, onGuardada
             Cancelar
           </Boton>
           <Boton type="submit" disabled={guardando}>
-            {guardando ? 'Creando…' : 'Crear orden'}
+            {guardando ? 'Creando…' : 'Crear y enviar al taller'}
           </Boton>
         </div>
       </form>

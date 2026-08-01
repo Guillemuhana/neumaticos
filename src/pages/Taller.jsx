@@ -11,9 +11,9 @@ import NuevaOrden from '../components/taller/NuevaOrden'
 import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Tarjeta, Vacio } from '../components/UI'
 
 /* El tablero sigue el recorrido real de la orden, de izquierda a derecha:
-   mostrador → administración → taller → mostrador. Todo el equipo ve las
-   cinco columnas —el vendedor necesita saber si el auto está listo— pero solo
-   actúa sobre las suyas, que van marcadas. */
+   entra por el mostrador, la toma el taller, vuelve al mostrador para
+   entregarla. Todo el equipo ve las tres columnas —el vendedor necesita saber
+   si el auto está listo— pero solo actúa sobre las suyas, que van marcadas. */
 
 export default function Taller() {
   const { sesion, rol } = useAuth()
@@ -27,11 +27,11 @@ export default function Taller() {
   const [abiertaId, setAbiertaId] = useState(null)
   const [verHistorial, setVerHistorial] = useState(false)
 
-  /* La orden apunta cuatro veces a `perfiles` (recibió, planificó, aprobó,
-     reparó). Embeber las cuatro obliga a nombrar cada constraint y, peor,
-     `perfiles` solo deja leer el perfil propio: al mecánico le llegarían todos
-     los nombres en blanco. Traemos el equipo aparte —por la vista `equipo`, que
-     expone solo nombres— y lo cruzamos acá. */
+  /* La orden apunta dos veces a `perfiles` (quién la recibió y quién la
+     repara). Embeberlas obliga a nombrar cada constraint y, peor, `perfiles`
+     solo deja leer el perfil propio: al mecánico le llegarían los nombres en
+     blanco. Traemos el equipo aparte —por la vista `equipo`, que expone solo
+     nombres— y lo cruzamos acá. */
   const { datos, cargando, error, recargar } = useConsulta(async () => {
     const [ordenes, equipo] = await Promise.all([
       supabase
@@ -53,8 +53,6 @@ export default function Taller() {
         ...o,
         mecanico: quien(o.mecanico_id),
         recepcionista: quien(o.recepcionista_id),
-        planificador: quien(o.planificada_por),
-        aprobador: quien(o.aprobada_por),
       })),
     }
   }, [])
@@ -77,7 +75,7 @@ export default function Taller() {
     <>
       <Encabezado
         titulo="Taller"
-        detalle="Del mostrador al taller: recepción, plan de trabajo, ejecución y entrega."
+        detalle="Del mostrador al taller y de vuelta: la orden entra, se trabaja y se entrega."
       >
         <Boton variante="secundario" onClick={() => setVerHistorial((v) => !v)}>
           <History size={16} /> {verHistorial ? 'Ver tablero' : `Historial (${entregadas.length})`}
@@ -115,13 +113,13 @@ export default function Taller() {
           )}
         </Tarjeta>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-2 xl:grid xl:grid-cols-5 xl:overflow-visible">
+        <div className="grid gap-4 md:grid-cols-3">
           {ETAPAS_ACTIVAS.map((columna) => {
             const enColumna = datos.filter((o) => o.estado === columna.valor)
             const meToca = Boolean(avanceDe(columna.valor, rol))
 
             return (
-              <section key={columna.valor} className="w-64 shrink-0 space-y-3 xl:w-auto">
+              <section key={columna.valor} className="space-y-3">
                 <div className="flex items-baseline justify-between gap-2">
                   <h2 className="display text-sm font-bold uppercase tracking-wide">
                     {columna.texto}

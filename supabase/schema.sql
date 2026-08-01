@@ -202,38 +202,43 @@ create trigger trg_stock_venta
   for each row execute function public.mover_stock();
 
 -- ------------------------------------------------------------------ taller
--- Una orden atraviesa tres escritorios y el orden importa:
+-- El cliente llega al mostrador, recepción le toma los datos y arma la orden
+-- con lo que pide. La orden pasa derecho al taller, que la toma, la trabaja y
+-- la termina. Recepción entrega y cobra.
 --
---   recepción      recibe el vehículo y toma los datos      → recepcion
---   administración arma el plan de trabajo con precios      → presupuestada
---   recepción      registra el OK del cliente               → aprobada
---   taller         ejecuta                                  → en_proceso → terminada
---   recepción      entrega y factura                        → entregada
+--   recepción  registra al cliente y crea la orden   → pendiente
+--   taller     la toma y la trabaja                  → en_proceso → terminada
+--   recepción  entrega y factura                     → entregada
 --
 -- Modelar las etapas como estados —y no como un campo libre— permite que la
--- base rechace los atajos: no se puede presupuestar sin plan, ni trabajar sin
--- aprobación, ni entregar sin haber terminado.
+-- base rechace los atajos: no se arranca sin mecánico asignado, no se entrega
+-- sin haber terminado y una orden entregada no se reabre.
+--
+-- El plan de trabajo (`orden_items`) es aparte y opcional: se carga cuando se
+-- sabe qué lleva, antes o durante el trabajo, y es lo que se factura al
+-- entregar. No frena el paso al taller.
 
 do $$ begin
-  create type estado_orden as enum (
-    'recepcion', 'presupuestada', 'aprobada', 'en_proceso', 'terminada', 'entregada'
-  );
+  create type estado_orden as enum ('pendiente', 'en_proceso', 'terminada', 'entregada');
 exception when duplicate_object then null; end $$;
 
--- Migración del enum viejo ('pendiente' era todo lo anterior a en_proceso).
--- Las órdenes que ya existían venían de un flujo sin presupuesto: entraron
--- aprobadas de hecho, así que ahí caen.
+-- Si la base quedó con el circuito de presupuesto y aprobación, esas etapas
+-- vuelven a 'pendiente': eran trabajo que todavía esperaba al taller.
 do $$ begin
   if exists (
     select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid
-    where t.typname = 'estado_orden' and e.enumlabel = 'pendiente'
+    where t.typname = 'estado_orden'
+      and e.enumlabel in ('recepcion', 'presupuestada', 'aprobada')
   ) then
-    create type estado_orden_nuevo as enum (
-      'recepcion', 'presupuestada', 'aprobada', 'en_proceso', 'terminada', 'entregada'
-    );
+    create type estado_orden_nuevo as enum ('pendiente', 'en_proceso', 'terminada', 'entregada');
     alter table ordenes alter column estado drop default;
     alter table ordenes alter column estado type estado_orden_nuevo
-      using (case estado::text when 'pendiente' then 'aprobada' else estado::text end)::estado_orden_nuevo;
+      using (case estado::text
+               when 'recepcion'     then 'pendiente'
+               when 'presupuestada' then 'pendiente'
+               when 'aprobada'      then 'pendiente'
+               else estado::text
+             end)::estado_orden_nuevo;
     drop type estado_orden;
     alter type estado_orden_nuevo rename to estado_orden;
   end if;
@@ -245,7 +250,7 @@ create table if not exists ordenes (
   mecanico_id  uuid references perfiles on delete set null,
   vehiculo     text not null,
   patente      text,
-  estado       estado_orden not null default 'recepcion',
+  estado       estado_orden not null default 'pendiente',
   notas        text,
   creada_en    timestamptz not null default now(),
   cerrada_en   timestamptz
@@ -256,21 +261,23 @@ alter table ordenes add column if not exists recepcionista_id uuid references pe
 alter table ordenes add column if not exists kilometraje integer;
 alter table ordenes add column if not exists falla_reportada text;
 
--- Administración: el plan de trabajo y su precio.
+-- El plan de trabajo y lo que suma, que es lo que se factura al entregar.
 alter table ordenes add column if not exists plan_notas text;
-alter table ordenes add column if not exists planificada_por uuid references perfiles on delete set null;
-alter table ordenes add column if not exists planificada_en timestamptz;
 alter table ordenes add column if not exists total numeric(12,2) not null default 0;
 
--- Aprobación del cliente y sellos de tiempo de cada etapa.
-alter table ordenes add column if not exists aprobada_en timestamptz;
-alter table ordenes add column if not exists aprobada_por uuid references perfiles on delete set null;
-alter table ordenes add column if not exists aprobacion_nota text;
+-- Sellos de tiempo de cada etapa y la venta que dejó la entrega.
 alter table ordenes add column if not exists iniciada_en timestamptz;
 alter table ordenes add column if not exists terminada_en timestamptz;
 alter table ordenes add column if not exists venta_id uuid references ventas on delete set null;
 
-alter table ordenes alter column estado set default 'recepcion';
+-- Restos del circuito con aprobación, que quedó sin usarse.
+alter table ordenes drop column if exists planificada_por;
+alter table ordenes drop column if exists planificada_en;
+alter table ordenes drop column if exists aprobada_en;
+alter table ordenes drop column if exists aprobada_por;
+alter table ordenes drop column if exists aprobacion_nota;
+
+alter table ordenes alter column estado set default 'pendiente';
 
 create index if not exists ordenes_estado_idx on ordenes (estado, creada_en desc);
 create index if not exists ordenes_mecanico_idx on ordenes (mecanico_id, estado);
@@ -340,8 +347,7 @@ end $$;
 create or replace function public.validar_avance_orden()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
-  v_rol   rol_usuario := public.mi_rol();
-  v_items integer;
+  v_rol rol_usuario := public.mi_rol();
 begin
   -- Un usuario sin perfil da rol NULL, y `NULL not in (...)` no es verdadero:
   -- sin este corte, cada control de abajo lo dejaría pasar de largo.
@@ -360,7 +366,6 @@ begin
     or new.falla_reportada is distinct from old.falla_reportada
     or new.plan_notas      is distinct from old.plan_notas
     or new.venta_id        is distinct from old.venta_id
-    or new.aprobada_en     is distinct from old.aprobada_en
   ) then
     raise exception 'El taller solo cambia el estado, el mecánico asignado y las notas.';
   end if;
@@ -372,32 +377,7 @@ begin
     raise exception 'La orden ya fue entregada y no admite cambios.';
   end if;
 
-  if new.estado = 'presupuestada' and old.estado in ('recepcion', 'aprobada') then
-    if v_rol <> 'gerencia' then
-      raise exception 'Solo administración arma el plan de trabajo.';
-    end if;
-    select count(*) into v_items from orden_items where orden_id = new.id;
-    if v_items = 0 then
-      raise exception 'El plan de trabajo no puede estar vacío.';
-    end if;
-    new.planificada_por := auth.uid();
-    new.planificada_en  := now();
-    new.aprobada_en     := null;
-    new.aprobada_por    := null;
-
-  elsif new.estado = 'recepcion' and old.estado = 'presupuestada' then
-    if v_rol not in ('gerencia', 'vendedor') then
-      raise exception 'Solo recepción o administración devuelven una orden a recepción.';
-    end if;
-
-  elsif new.estado = 'aprobada' and old.estado = 'presupuestada' then
-    if v_rol not in ('gerencia', 'vendedor') then
-      raise exception 'Solo recepción o administración registran la aprobación del cliente.';
-    end if;
-    new.aprobada_por := auth.uid();
-    new.aprobada_en  := now();
-
-  elsif new.estado = 'en_proceso' and old.estado in ('aprobada', 'terminada') then
+  if new.estado = 'en_proceso' and old.estado in ('pendiente', 'terminada') then
     if v_rol not in ('gerencia', 'mecanico') then
       raise exception 'Solo el taller inicia el trabajo.';
     end if;
@@ -412,6 +392,14 @@ begin
       raise exception 'Solo el taller marca el trabajo como terminado.';
     end if;
     new.terminada_en := now();
+
+  -- Devolver a la cola: el taller la tomó por error o quedó a la espera de un
+  -- repuesto y conviene que otro la pueda agarrar.
+  elsif new.estado = 'pendiente' and old.estado = 'en_proceso' then
+    if v_rol not in ('gerencia', 'mecanico') then
+      raise exception 'Solo el taller devuelve una orden a la cola.';
+    end if;
+    new.iniciada_en := null;
 
   elsif new.estado = 'entregada' and old.estado = 'terminada' then
     if v_rol not in ('gerencia', 'vendedor') then
@@ -457,6 +445,13 @@ begin
 
   if v_orden.estado <> 'terminada' then
     raise exception 'Solo se entrega una orden terminada.';
+  end if;
+
+  -- El plan es opcional: una orden sin renglones no tiene qué facturar, y
+  -- una venta de cero ensuciaría Ventas y las estadísticas.
+  if not exists (select 1 from orden_items where orden_id = p_orden) then
+    update ordenes set estado = 'entregada' where id = p_orden;
+    return null;
   end if;
 
   insert into ventas (cliente_id, vendedor_id, estado, notas)
@@ -584,40 +579,37 @@ create policy ordenes_leer on ordenes for select to authenticated using (true);
 drop policy if exists ordenes_escribir on ordenes;
 drop policy if exists ordenes_crear on ordenes;
 create policy ordenes_crear on ordenes for insert to authenticated
-  with check (public.mi_rol() in ('gerencia', 'vendedor') and estado = 'recepcion');
+  with check (public.mi_rol() in ('gerencia', 'vendedor') and estado = 'pendiente');
 
--- El mecánico solo alcanza las órdenes que ya llegaron al taller: mientras
--- están en recepción o presupuesto no puede ni tocarlas.
+-- El mecánico llega a toda orden que siga abierta; la entregada la congela el
+-- trigger, que además le impide tocar importes y datos del cliente.
 drop policy if exists ordenes_actualizar on ordenes;
 create policy ordenes_actualizar on ordenes for update to authenticated
   using (
     public.mi_rol() in ('gerencia', 'vendedor')
-    or (public.mi_rol() = 'mecanico' and estado in ('aprobada', 'en_proceso', 'terminada'))
+    or (public.mi_rol() = 'mecanico' and estado <> 'entregada')
   )
   with check (public.mi_rol() in ('gerencia', 'vendedor', 'mecanico'));
 
 drop policy if exists ordenes_borrar on ordenes;
 create policy ordenes_borrar on ordenes for delete to authenticated
-  using (public.es_gerencia() and estado in ('recepcion', 'presupuestada'));
+  using (public.es_gerencia() and estado = 'pendiente');
 
--- El plan lo arma administración, y solo antes de que el cliente lo apruebe:
--- después es el presupuesto aceptado y cambiarlo sería cobrar otra cosa.
+-- El plan lo carga el mostrador —recepción anota lo que el cliente pide y
+-- administración lo valoriza— y se puede completar hasta la entrega, porque
+-- recién ahí se sabe qué llevó de verdad. Después es un comprobante.
 drop policy if exists orden_items_leer on orden_items;
 create policy orden_items_leer on orden_items for select to authenticated using (true);
 
 drop policy if exists orden_items_escribir on orden_items;
 create policy orden_items_escribir on orden_items for all to authenticated
   using (
-    public.es_gerencia()
-    and exists (
-      select 1 from ordenes o
-       where o.id = orden_id and o.estado in ('recepcion', 'presupuestada'))
+    public.mi_rol() in ('gerencia', 'vendedor')
+    and exists (select 1 from ordenes o where o.id = orden_id and o.estado <> 'entregada')
   )
   with check (
-    public.es_gerencia()
-    and exists (
-      select 1 from ordenes o
-       where o.id = orden_id and o.estado in ('recepcion', 'presupuestada'))
+    public.mi_rol() in ('gerencia', 'vendedor')
+    and exists (select 1 from ordenes o where o.id = orden_id and o.estado <> 'entregada')
   );
 
 -- Fichadas: cada uno ficha lo propio y no puede editarlo después.

@@ -15,7 +15,6 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
   const { sesion, rol } = useAuth()
   const [error, setError] = useState('')
   const [trabajando, setTrabajando] = useState(false)
-  const [nota, setNota] = useState('')
 
   const etapa = etapaDe(orden.estado)
   const paso = avanceDe(orden.estado, rol)
@@ -61,8 +60,6 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
       if (paso.destino === 'en_proceso' && !orden.mecanico_id && rol === 'mecanico') {
         cambios.mecanico_id = sesion.user.id
       }
-      if (paso.destino === 'aprobada' && nota.trim()) cambios.aprobacion_nota = nota.trim()
-
       const { error } = await supabase.from('ordenes').update(cambios).eq('id', orden.id)
       if (error) setError(error.message)
       else {
@@ -106,12 +103,6 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
         )}
 
         <Trazabilidad orden={orden} />
-
-        {paso?.destino === 'aprobada' && (
-          <Campo etiqueta="Nota de aprobación" ayuda="Cómo aprobó el cliente: en persona, por teléfono, WhatsApp…">
-            <input className={estiloInput} value={nota} onChange={(e) => setNota(e.target.value)} />
-          </Campo>
-        )}
 
         <Aviso>{error}</Aviso>
 
@@ -209,7 +200,7 @@ function Recepcion({ orden, editable, onGuardado }) {
           <Campo etiqueta="Kilometraje">
             <input type="number" min="0" className={estiloInput} {...campo('kilometraje')} />
           </Campo>
-          <Campo etiqueta="Falla reportada">
+          <Campo etiqueta="Qué pide el cliente">
             <textarea rows={3} className={estiloInput} {...campo('falla_reportada')} />
           </Campo>
           <Campo etiqueta="Notas">
@@ -234,7 +225,7 @@ function Recepcion({ orden, editable, onGuardado }) {
           </Dato>
           <Dato etiqueta="Recibió">{orden.recepcionista?.nombre}</Dato>
           <div className="sm:col-span-2">
-            <Dato etiqueta="Falla reportada">{orden.falla_reportada}</Dato>
+            <Dato etiqueta="Qué pide el cliente">{orden.falla_reportada}</Dato>
           </div>
           {orden.notas && (
             <div className="sm:col-span-2">
@@ -280,8 +271,8 @@ function Plan({ orden, items, total, editable, onCambio }) {
           {!items.datos?.length ? (
             <p className="py-2 text-sm text-acero-500">
               {editable
-                ? 'Todavía no hay renglones. Agregá la mano de obra y los repuestos.'
-                : 'Administración todavía no cargó el plan.'}
+                ? 'Sin renglones todavía. Cargá la mano de obra y los repuestos cuando se sepan: se puede completar hasta la entrega.'
+                : 'El mostrador todavía no cargó el detalle.'}
             </p>
           ) : (
             <ul className="divide-y divide-concreto-200">
@@ -533,8 +524,6 @@ function AsignarMecanico({ orden, onGuardado }) {
 function Trazabilidad({ orden }) {
   const hitos = [
     ['Recibida', orden.creada_en, orden.recepcionista?.nombre],
-    ['Presupuestada', orden.planificada_en, orden.planificador?.nombre],
-    ['Aprobada', orden.aprobada_en, orden.aprobador?.nombre],
     ['Iniciada', orden.iniciada_en, orden.mecanico?.nombre],
     ['Terminada', orden.terminada_en, orden.mecanico?.nombre],
     ['Entregada', orden.cerrada_en, null],
@@ -553,11 +542,6 @@ function Trazabilidad({ orden }) {
           </li>
         ))}
       </ul>
-      {orden.aprobacion_nota && (
-        <p className="mt-2 border-t border-concreto-200 pt-2 text-xs text-acero-500">
-          Aprobación: {orden.aprobacion_nota}
-        </p>
-      )}
     </Bloque>
   )
 }

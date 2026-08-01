@@ -38,22 +38,27 @@ clave `anon`).
 
 ## El circuito del taller
 
-Una orden atraviesa tres escritorios, y el orden importa:
+Todo empieza cuando entra un cliente. Recepción le toma los datos y arma la
+orden con lo que pide; la orden pasa derecho al taller, que la toma y la
+trabaja; recepción entrega y cobra.
 
 | Etapa | Quién | Qué pasa |
 | --- | --- | --- |
-| `recepcion` | Vendedor / Gerencia | Llega el vehículo. Se identifica al cliente (o se lo da de alta ahí mismo) y se registran patente, kilometraje y la falla reportada. |
-| `presupuestada` | Gerencia | Administración arma el plan de trabajo: mano de obra y repuestos del stock, con precios. El total lo calcula la base. |
-| `aprobada` | Vendedor / Gerencia | Se registra el OK del cliente. Recién acá la orden se ve como trabajo a hacer. |
-| `en_proceso` | Mecánico / Gerencia | El taller ejecuta. Sin mecánico asignado no arranca. |
+| `pendiente` | Vendedor / Gerencia | Se identifica al cliente (o se lo da de alta ahí mismo), se registran vehículo, patente, kilometraje y lo que viene a resolver, y se asigna el mecánico. La orden ya aparece en el tablero del taller. |
+| `en_proceso` | Mecánico / Gerencia | El taller la toma y trabaja. Sin mecánico asignado no arranca. |
 | `terminada` | Mecánico / Gerencia | El trabajo está listo para entregar. |
 | `entregada` | Vendedor / Gerencia | Se entrega el vehículo. En un solo paso se cierra la orden, se genera la venta y se descuenta el stock de los repuestos. |
 
+El **plan de trabajo** (`orden_items`: mano de obra y repuestos con precio) es
+aparte y opcional. Se carga desde el mostrador cuando se sabe qué lleva —antes,
+durante o al terminar— y es lo que se factura al entregar. No frena el paso al
+taller. Una orden entregada sin plan simplemente no genera venta.
+
 Las etapas no son un rótulo: el trigger `validar_avance_orden` rechaza los
-atajos. No se puede presupuestar sin plan, ni trabajar sin aprobación, ni
-entregar sin haber terminado, ni tocar una orden ya entregada. El plan queda
-congelado una vez aprobado —cambiarlo sería cobrarle otra cosa al cliente— y el
-mecánico no puede modificar importes ni datos del cliente.
+atajos. No se arranca sin mecánico asignado, no se entrega sin haber terminado
+y una orden entregada no se reabre ni se corrige. El mecánico puede mover el
+estado y tomar la orden, pero no tocar importes ni datos del cliente: RLS
+decide filas, no columnas, así que eso lo aplica el trigger.
 
 Entregar pasa por la función `entregar_orden`: cerrar, facturar y descontar
 stock ocurren juntos o no ocurre ninguno.
