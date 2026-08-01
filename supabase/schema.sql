@@ -99,7 +99,25 @@ create table if not exists productos (
   creado_en     timestamptz not null default now()
 );
 
-alter table productos add column if not exists categoria text not null default 'Cubierta';
+-- `create table if not exists` no toca una tabla que ya existe, así que las
+-- columnas que se sumaron después del primer despliegue hay que agregarlas
+-- explícitamente. Sin esto, una base creada con el esquema viejo hace fallar
+-- la pantalla de Stock con "could not find the column in the schema cache".
+alter table productos add column if not exists categoria    text not null default 'Cubierta';
+alter table productos add column if not exists codigo       text;
+alter table productos add column if not exists descripcion  text;
+alter table productos add column if not exists imagen_url   text;
+alter table productos add column if not exists costo        numeric(12,2) not null default 0;
+alter table productos add column if not exists stock_minimo integer not null default 4;
+alter table productos add column if not exists activo       boolean not null default true;
+
+do $$ begin
+  alter table productos add constraint productos_codigo_key unique (codigo);
+exception when duplicate_table or duplicate_object then null; end $$;
+
+alter table clientes add column if not exists telefono  text;
+alter table clientes add column if not exists email     text;
+alter table clientes add column if not exists documento text;
 create index if not exists productos_categoria_idx on productos (categoria);
 create index if not exists productos_marca_idx on productos (marca);
 create index if not exists productos_medida_idx on productos (medida);
