@@ -45,7 +45,10 @@ export default function Inicio() {
   if (error) return <Aviso>{error}</Aviso>
 
   const facturado = datos.ventasHoy.reduce((a, v) => a + Number(v.total), 0)
-  const abiertas = datos.ordenes.filter((o) => o.estado === 'pendiente' || o.estado === 'en_proceso')
+  /* Todo lo que entró y todavía no salió: mientras no esté entregada, el
+     vehículo sigue en el taller aunque nadie le esté poniendo las manos. */
+  const abiertas = datos.ordenes.filter((o) => o.estado !== 'entregada')
+  const esperandoPlan = datos.ordenes.filter((o) => o.estado === 'recepcion')
 
   return (
     <>
@@ -66,9 +69,14 @@ export default function Inicio() {
         />
         <Metrica
           icono={ClipboardList}
-          titulo="Órdenes abiertas"
+          titulo="Vehículos en taller"
           valor={abiertas.length}
-          pie="Pendientes o en proceso"
+          pie={
+            esperandoPlan.length
+              ? `${esperandoPlan.length} esperando presupuesto`
+              : 'Órdenes sin entregar'
+          }
+          tono={esperandoPlan.length ? 'atencion' : 'neutro'}
           onClick={() => navigate('/taller')}
           className="cursor-pointer"
         />

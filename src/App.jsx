@@ -97,7 +97,9 @@ export default function App() {
         <Route
           path="/taller"
           element={
-            <SoloRoles roles={['gerencia', 'mecanico']}>
+            /* Recepción abre la orden y entrega el vehículo: el vendedor entra
+               al taller aunque no ejecute el trabajo. */
+            <SoloRoles roles={['gerencia', 'vendedor', 'mecanico']}>
               <Taller />
             </SoloRoles>
           }

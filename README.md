@@ -36,6 +36,28 @@ npm run ensure-perfiles
 Las credenciales salen de Supabase → Project Settings → API (`Project URL` y la
 clave `anon`).
 
+## El circuito del taller
+
+Una orden atraviesa tres escritorios, y el orden importa:
+
+| Etapa | Quién | Qué pasa |
+| --- | --- | --- |
+| `recepcion` | Vendedor / Gerencia | Llega el vehículo. Se identifica al cliente (o se lo da de alta ahí mismo) y se registran patente, kilometraje y la falla reportada. |
+| `presupuestada` | Gerencia | Administración arma el plan de trabajo: mano de obra y repuestos del stock, con precios. El total lo calcula la base. |
+| `aprobada` | Vendedor / Gerencia | Se registra el OK del cliente. Recién acá la orden se ve como trabajo a hacer. |
+| `en_proceso` | Mecánico / Gerencia | El taller ejecuta. Sin mecánico asignado no arranca. |
+| `terminada` | Mecánico / Gerencia | El trabajo está listo para entregar. |
+| `entregada` | Vendedor / Gerencia | Se entrega el vehículo. En un solo paso se cierra la orden, se genera la venta y se descuenta el stock de los repuestos. |
+
+Las etapas no son un rótulo: el trigger `validar_avance_orden` rechaza los
+atajos. No se puede presupuestar sin plan, ni trabajar sin aprobación, ni
+entregar sin haber terminado, ni tocar una orden ya entregada. El plan queda
+congelado una vez aprobado —cambiarlo sería cobrarle otra cosa al cliente— y el
+mecánico no puede modificar importes ni datos del cliente.
+
+Entregar pasa por la función `entregar_orden`: cerrar, facturar y descontar
+stock ocurren juntos o no ocurre ninguno.
+
 ## Estructura
 
 ```
@@ -46,10 +68,15 @@ src/
   lib/supabase.js       cliente de Supabase
   context/AuthProvider  sesión, iniciarSesion, cerrarSesion
   components/UI.jsx     Boton, Campo, Aviso, Cargando, estiloInput
-  pages/                Login, Inicio
+  components/taller/    RecibirVehiculo (recepción), PanelOrden (plan y avance)
+  lib/taller.js         etapas del circuito y quién puede avanzar cada una
+  pages/                Login, Inicio, Stock, Ventas, Clientes, Taller,
+                        Personal, Estadisticas
 ```
 
 ## Pendiente
 
 - `public/logo-perez.png` (el logo referenciado por Login e Inicio)
-- Los módulos de stock, ventas, taller y personal: hoy son tarjetas sin destino
+- Exportar la orden y el presupuesto a PDF
+- Calendario de turnos por técnico
+- Datos y logo de la empresa configurables para la papelería

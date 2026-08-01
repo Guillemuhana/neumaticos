@@ -21,7 +21,7 @@ const navegacion = [
   { a: '/stock', texto: 'Stock', icono: Boxes, roles: ['gerencia', 'vendedor'] },
   { a: '/ventas', texto: 'Ventas', icono: Receipt, roles: ['gerencia', 'vendedor'] },
   { a: '/clientes', texto: 'Clientes', icono: Contact, roles: ['gerencia', 'vendedor'] },
-  { a: '/taller', texto: 'Taller', icono: Wrench, roles: ['gerencia', 'mecanico'] },
+  { a: '/taller', texto: 'Taller', icono: Wrench, roles: ['gerencia', 'vendedor', 'mecanico'] },
   { a: '/personal', texto: 'Personal', icono: Users, roles: ['gerencia', 'vendedor', 'mecanico'] },
   { a: '/estadisticas', texto: 'Estadísticas', icono: BarChart3, roles: ['gerencia'] },
 ]

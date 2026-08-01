@@ -16,6 +16,7 @@ import { es } from 'date-fns/locale'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { numero, plata } from '../lib/formato'
+import { etapaDe } from '../lib/taller'
 import { Aviso, Boton, Cargando, Encabezado, Metrica } from '../components/UI'
 import { MARCA, PanelGrafico, Tooltip, ejeComun } from '../components/Grafico'
 
@@ -50,7 +51,7 @@ export default function Estadisticas() {
         .eq('ventas.estado', 'confirmada')
         .gte('ventas.creada_en', desde)
 
-    const [ventas, ordenes, productos, ventasDetalle] = await Promise.all([
+    const [ventas, ordenes, equipo, productos, ventasDetalle] = await Promise.all([
       supabase
         .from('ventas')
         .select('id, total, creada_en, estado, vendedor_id, perfiles(nombre)')
@@ -58,8 +59,12 @@ export default function Estadisticas() {
         .gte('creada_en', desde),
       supabase
         .from('ordenes')
-        .select('id, vehiculo, patente, servicios, estado, notas, creada_en, perfiles(nombre)')
+        /* Sin embeber `perfiles`: `ordenes` la referencia cuatro veces y la
+           consulta saldría ambigua. El mecánico se resuelve más abajo contra
+           la vista `equipo`. */
+        .select('id, vehiculo, patente, estado, total, notas, creada_en, mecanico_id')
         .gte('creada_en', desde),
+      supabase.from('equipo').select('id, nombre'),
       conCategoria(
         () => supabase.from('productos').select('stock, costo, categoria').eq('activo', true),
         () => supabase.from('productos').select('stock, costo').eq('activo', true)
@@ -69,13 +74,18 @@ export default function Estadisticas() {
 
     /* Devolver el error entero, no un booleano: el hook lee `.message`, y un
        `true` suelto dejaba el cartel vacío — que es la pantalla en blanco. */
-    const fallo = [ventas, ordenes, productos, ventasDetalle].find((r) => r.error)?.error
+    const fallo = [ventas, ordenes, equipo, productos, ventasDetalle].find((r) => r.error)?.error
     if (fallo) return { error: fallo }
+
+    const nombre = new Map(equipo.data.map((p) => [p.id, p.nombre]))
 
     return {
       data: {
         ventas: ventas.data,
-        ordenes: ordenes.data,
+        ordenes: ordenes.data.map((o) => ({
+          ...o,
+          mecanico: o.mecanico_id ? { nombre: nombre.get(o.mecanico_id) } : null,
+        })),
         productos: productos.data,
         ventasDetalle: ventasDetalle.data,
       },
@@ -138,7 +148,7 @@ export default function Estadisticas() {
       .sort((a, b) => b.total - a.total)
   })()
 
-  const porMecanico = agrupar(ordenes, (o) => o.perfiles?.nombre).sort(
+  const porMecanico = agrupar(ordenes, (o) => o.mecanico?.nombre).sort(
     (a, b) => b.cantidad - a.cantidad
   )
 
@@ -187,14 +197,14 @@ export default function Estadisticas() {
       ...ventasHoy.map((v) => [v.id ?? '—', v.perfiles?.nombre ?? '—', v.estado, plata(v.total), format(new Date(v.creada_en), 'HH:mm')]),
       [],
       ['Trabajos de taller del día'],
-      ['Orden', 'Vehículo', 'Patente', 'Mecánico', 'Estado', 'Servicios'],
+      ['Orden', 'Vehículo', 'Patente', 'Mecánico', 'Etapa', 'Importe'],
       ...ordenesHoy.map((o) => [
         o.id ?? '—',
         o.vehiculo || '—',
         o.patente || '—',
-        o.perfiles?.nombre || 'Sin asignar',
-        o.estado,
-        (o.servicios || []).join(', '),
+        o.mecanico?.nombre || 'Sin asignar',
+        etapaDe(o.estado).texto,
+        plata(o.total),
       ]),
       [],
       ['Ventas por vendedor'],
@@ -374,13 +384,14 @@ export default function Estadisticas() {
           titulo="Trabajos del taller hoy"
           detalle="Órdenes del día con vehículo, mecánico y estado."
           datos={ordenesHoy}
-          columnas={['Orden', 'Vehículo', 'Patente', 'Mecánico', 'Estado']}
+          columnas={['Orden', 'Vehículo', 'Patente', 'Mecánico', 'Etapa', 'Importe']}
           filas={ordenesHoy.map((o) => [
             o.id ?? '—',
             o.vehiculo || '—',
             o.patente || '—',
-            o.perfiles?.nombre || 'Sin asignar',
-            o.estado,
+            o.mecanico?.nombre || 'Sin asignar',
+            etapaDe(o.estado).texto,
+            plata(o.total),
           ])}
         />
       </div>
