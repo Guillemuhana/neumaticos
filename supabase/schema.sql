@@ -225,11 +225,22 @@ exception when duplicate_object then null; end $$;
 -- Si la base quedó con el circuito de presupuesto y aprobación, esas etapas
 -- vuelven a 'pendiente': eran trabajo que todavía esperaba al taller.
 do $$ begin
-  if exists (
+  if to_regclass('public.ordenes') is not null and exists (
     select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid
     where t.typname = 'estado_orden'
       and e.enumlabel in ('recepcion', 'presupuestada', 'aprobada')
   ) then
+    /* Postgres no deja cambiarle el tipo a una columna de la que dependa una
+       política, y estas la nombran. Se sueltan acá y el final del archivo las
+       vuelve a crear con las etapas nuevas. */
+    drop policy if exists ordenes_crear      on ordenes;
+    drop policy if exists ordenes_actualizar on ordenes;
+    drop policy if exists ordenes_borrar     on ordenes;
+    drop policy if exists ordenes_escribir   on ordenes;
+    if to_regclass('public.orden_items') is not null then
+      drop policy if exists orden_items_escribir on orden_items;
+    end if;
+
     create type estado_orden_nuevo as enum ('pendiente', 'en_proceso', 'terminada', 'entregada');
     alter table ordenes alter column estado drop default;
     alter table ordenes alter column estado type estado_orden_nuevo
