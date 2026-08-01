@@ -99,7 +99,9 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
           onCambio={refrescar}
         />
 
-        {rol === 'gerencia' && orden.estado !== 'entregada' && (
+        {/* Recepción también asigna: es quien recibe el auto y sabe quién está
+            libre. RLS deja escribir la orden a los dos roles. */}
+        {['gerencia', 'vendedor'].includes(rol) && orden.estado !== 'entregada' && (
           <AsignarMecanico orden={orden} onGuardado={onCambio} />
         )}
 

@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Check, Search, UserPlus } from 'lucide-react'
 import { useAuth } from '../../context/AuthProvider'
+import { useConsulta } from '../../hooks/useConsulta'
 import { supabase } from '../../lib/supabase'
 import { Aviso, Boton, Campo, Modal, estiloInput } from '../UI'
 
-/* Primer escritorio: llega el vehículo y recepción toma los datos.
-   La orden nace en 'recepcion' y sin plan — valorizarla es trabajo de
-   administración, y el esquema no deja saltearse ese paso. */
+/* Alta de la orden, tal como pasa en el mostrador: quién es el cliente, qué
+   vehículo dejó, qué dice que le pasa y quién lo va a atender.
+
+   El mecánico se elige acá y no más adelante porque en el taller se decide
+   apenas entra el auto. La orden igual nace en 'recepcion': valorizarla es
+   trabajo de administración y el esquema no deja saltearse ese paso. */
 
 const VACIO = {
   vehiculo: '',
@@ -16,12 +20,24 @@ const VACIO = {
   notas: '',
 }
 
-export default function RecibirVehiculo({ onCerrar, onGuardada }) {
+export default function NuevaOrden({ onCerrar, onGuardada }) {
   const { sesion } = useAuth()
   const [form, setForm] = useState(VACIO)
   const [cliente, setCliente] = useState(null)
+  const [mecanicoId, setMecanicoId] = useState('')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
+
+  const { datos: mecanicos } = useConsulta(
+    () =>
+      supabase
+        .from('equipo')
+        .select('id, nombre')
+        .eq('rol', 'mecanico')
+        .eq('activo', true)
+        .order('nombre'),
+    []
+  )
 
   const campo = (k) => ({
     value: form[k],
@@ -31,60 +47,106 @@ export default function RecibirVehiculo({ onCerrar, onGuardada }) {
   const guardar = async (e) => {
     e.preventDefault()
     if (!cliente) {
-      setError('Identificá al cliente antes de recibir el vehículo.')
+      setError('Identificá al cliente antes de crear la orden.')
       return
     }
 
     setGuardando(true)
     setError('')
 
-    const { error } = await supabase.from('ordenes').insert({
-      cliente_id: cliente.id,
-      recepcionista_id: sesion.user.id,
-      vehiculo: form.vehiculo.trim(),
-      patente: form.patente.trim().toUpperCase() || null,
-      kilometraje: form.kilometraje === '' ? null : Number(form.kilometraje),
-      falla_reportada: form.falla_reportada.trim() || null,
-      notas: form.notas.trim() || null,
-      estado: 'recepcion',
-    })
+    const { data, error } = await supabase
+      .from('ordenes')
+      .insert({
+        cliente_id: cliente.id,
+        recepcionista_id: sesion.user.id,
+        mecanico_id: mecanicoId || null,
+        vehiculo: form.vehiculo.trim(),
+        patente: form.patente.trim().toUpperCase() || null,
+        kilometraje: form.kilometraje === '' ? null : Number(form.kilometraje),
+        falla_reportada: form.falla_reportada.trim() || null,
+        notas: form.notas.trim() || null,
+        estado: 'recepcion',
+      })
+      .select('id')
+      .single()
 
     if (error) {
       setError(error.message)
       setGuardando(false)
-    } else onGuardada()
+    } else onGuardada(data.id)
   }
 
   return (
-    <Modal titulo="Recibir vehículo" onCerrar={onCerrar}>
-      <form onSubmit={guardar} className="space-y-4">
-        <BuscadorCliente cliente={cliente} onElegir={setCliente} />
+    <Modal titulo="Nueva orden de trabajo" onCerrar={onCerrar}>
+      <form onSubmit={guardar} className="space-y-5">
+        <Paso numero={1} titulo="Cliente">
+          <BuscadorCliente cliente={cliente} onElegir={setCliente} />
+        </Paso>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Campo etiqueta="Vehículo">
-            <input required className={estiloInput} placeholder="Ford Ranger 2019" {...campo('vehiculo')} />
+        <Paso numero={2} titulo="Vehículo">
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Campo etiqueta="Vehículo">
+                <input
+                  required
+                  className={estiloInput}
+                  placeholder="Ford Ranger 2019"
+                  {...campo('vehiculo')}
+                />
+              </Campo>
+              <Campo etiqueta="Patente">
+                <input
+                  className={`${estiloInput} uppercase`}
+                  placeholder="AB123CD"
+                  {...campo('patente')}
+                />
+              </Campo>
+            </div>
+
+            <Campo etiqueta="Kilometraje">
+              <input type="number" min="0" className={estiloInput} placeholder="82000" {...campo('kilometraje')} />
+            </Campo>
+
+            <Campo etiqueta="Falla reportada" ayuda="Lo que dice el cliente, con sus palabras.">
+              <textarea
+                rows={3}
+                className={estiloInput}
+                placeholder="Ruido en el tren delantero al doblar…"
+                {...campo('falla_reportada')}
+              />
+            </Campo>
+
+            <Campo etiqueta="Notas de recepción">
+              <input className={estiloInput} placeholder="Entrega llave de rueda" {...campo('notas')} />
+            </Campo>
+          </div>
+        </Paso>
+
+        <Paso numero={3} titulo="Taller">
+          <Campo
+            etiqueta="Mecánico asignado"
+            ayuda="Podés dejarlo sin asignar y elegirlo después, pero el trabajo no arranca sin mecánico."
+          >
+            <select
+              className={estiloInput}
+              value={mecanicoId}
+              onChange={(e) => setMecanicoId(e.target.value)}
+            >
+              <option value="">Sin asignar</option>
+              {mecanicos?.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nombre}
+                </option>
+              ))}
+            </select>
           </Campo>
-          <Campo etiqueta="Patente">
-            <input className={`${estiloInput} uppercase`} placeholder="AB123CD" {...campo('patente')} />
-          </Campo>
-        </div>
 
-        <Campo etiqueta="Kilometraje">
-          <input type="number" min="0" className={estiloInput} placeholder="82000" {...campo('kilometraje')} />
-        </Campo>
-
-        <Campo etiqueta="Falla reportada" ayuda="Lo que dice el cliente, con sus palabras.">
-          <textarea
-            rows={3}
-            className={estiloInput}
-            placeholder="Ruido en el tren delantero al doblar…"
-            {...campo('falla_reportada')}
-          />
-        </Campo>
-
-        <Campo etiqueta="Notas de recepción">
-          <input className={estiloInput} placeholder="Entrega llave de rueda" {...campo('notas')} />
-        </Campo>
+          {mecanicos && mecanicos.length === 0 && (
+            <p className="mt-2 text-xs text-atencion-700">
+              No hay nadie con rol mecánico activo. Gerencia lo da de alta desde Personal.
+            </p>
+          )}
+        </Paso>
 
         <Aviso>{error}</Aviso>
 
@@ -93,11 +155,27 @@ export default function RecibirVehiculo({ onCerrar, onGuardada }) {
             Cancelar
           </Boton>
           <Boton type="submit" disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Abrir orden'}
+            {guardando ? 'Creando…' : 'Crear orden'}
           </Boton>
         </div>
       </form>
     </Modal>
+  )
+}
+
+/* Numerar los bloques es la diferencia entre "un formulario largo" y "tres
+   cosas que tengo que completar". */
+function Paso({ numero, titulo, children }) {
+  return (
+    <section>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-caucho-950 text-[0.6875rem] font-bold text-white">
+          {numero}
+        </span>
+        <h3 className="display text-sm font-bold">{titulo}</h3>
+      </div>
+      {children}
+    </section>
   )
 }
 
@@ -112,7 +190,7 @@ function BuscadorCliente({ cliente, onElegir }) {
 
   useEffect(() => {
     const q = busqueda.trim()
-    if (cliente || q.length < 2) {
+    if (cliente || alta || q.length < 2) {
       setResultados([])
       return
     }
@@ -139,7 +217,7 @@ function BuscadorCliente({ cliente, onElegir }) {
       vigente = false
       clearTimeout(id)
     }
-  }, [busqueda, cliente])
+  }, [busqueda, cliente, alta])
 
   if (cliente) {
     return (
@@ -173,25 +251,39 @@ function BuscadorCliente({ cliente, onElegir }) {
     )
   }
 
+  const escrito = busqueda.trim()
+
   return (
-    <Campo etiqueta="Cliente" ayuda="Buscá por nombre, teléfono o documento.">
-      <div className="relative">
-        <Search
-          size={16}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-acero-500"
-          aria-hidden="true"
-        />
-        <input
-          className={`${estiloInput} pl-9`}
-          placeholder="Pérez, 351…, 30111222"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
+    <div>
+      {/* Buscar y dar de alta conviven: el cliente nuevo no tiene que
+          descubrirse escribiendo un nombre que no va a encontrar. */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-acero-500"
+            aria-hidden="true"
+          />
+          <input
+            className={`${estiloInput} pl-9`}
+            placeholder="Buscar por nombre, teléfono o documento…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+        </div>
+        <Boton
+          type="button"
+          variante="secundario"
+          className="shrink-0"
+          onClick={() => setAlta({ nombre: escrito, telefono: '', documento: '' })}
+        >
+          <UserPlus size={16} /> Nuevo
+        </Boton>
       </div>
 
       {error && <p className="mt-1 text-xs text-perez-700">{error}</p>}
 
-      {busqueda.trim().length >= 2 && (
+      {escrito.length >= 2 && (
         <div className="mt-2 overflow-hidden rounded-lg border border-concreto-200">
           {resultados.map((c) => (
             <button
@@ -207,17 +299,14 @@ function BuscadorCliente({ cliente, onElegir }) {
             </button>
           ))}
 
-          <button
-            type="button"
-            onClick={() => setAlta({ nombre: busqueda.trim(), telefono: '', documento: '' })}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-perez-700 hover:bg-perez-50"
-          >
-            <UserPlus size={15} aria-hidden="true" />
-            {buscando && !resultados.length ? 'Buscando…' : `Dar de alta “${busqueda.trim()}”`}
-          </button>
+          {!resultados.length && (
+            <p className="px-3 py-2 text-sm text-acero-500">
+              {buscando ? 'Buscando…' : `Nadie coincide con “${escrito}”. Dalo de alta con “Nuevo”.`}
+            </p>
+          )}
         </div>
       )}
-    </Campo>
+    </div>
   )
 }
 
@@ -258,7 +347,7 @@ function AltaRapida({ inicial, onCancelar, onCreado }) {
       <p className="text-[0.8125rem] font-semibold text-caucho-800">Cliente nuevo</p>
 
       <Campo etiqueta="Nombre completo">
-        <input className={estiloInput} {...campo('nombre')} />
+        <input autoFocus className={estiloInput} {...campo('nombre')} />
       </Campo>
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo etiqueta="Teléfono">

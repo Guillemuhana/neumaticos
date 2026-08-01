@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { desde, plata } from '../lib/formato'
 import { ETAPAS_ACTIVAS, avanceDe, etapaDe } from '../lib/taller'
 import PanelOrden from '../components/taller/PanelOrden'
-import RecibirVehiculo from '../components/taller/RecibirVehiculo'
+import NuevaOrden from '../components/taller/NuevaOrden'
 import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Tarjeta, Vacio } from '../components/UI'
 
 /* El tablero sigue el recorrido real de la orden, de izquierda a derecha:
@@ -15,8 +15,8 @@ import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Tarjeta, Vacio } from '..
    actúa sobre las suyas, que van marcadas. */
 
 export default function Taller() {
-  const { rol } = useAuth()
-  const [recibiendo, setRecibiendo] = useState(false)
+  const { sesion, rol } = useAuth()
+  const [creando, setCreando] = useState(false)
   const [abiertaId, setAbiertaId] = useState(null)
   const [verHistorial, setVerHistorial] = useState(false)
 
@@ -76,8 +76,8 @@ export default function Taller() {
           <History size={16} /> {verHistorial ? 'Ver tablero' : `Historial (${entregadas.length})`}
         </Boton>
         {recibe && (
-          <Boton onClick={() => setRecibiendo(true)}>
-            <Plus size={16} /> Recibir vehículo
+          <Boton onClick={() => setCreando(true)}>
+            <Plus size={16} /> Nueva orden de trabajo
           </Boton>
         )}
       </Encabezado>
@@ -95,10 +95,17 @@ export default function Taller() {
             titulo="No hay órdenes"
             detalle={
               recibe
-                ? 'Cuando llegue un vehículo, abrí la orden desde “Recibir vehículo”.'
+                ? 'Cuando llegue un vehículo, cargá la orden con el cliente, la falla y el mecánico que lo va a atender.'
                 : 'Todavía no hay trabajo cargado desde recepción.'
             }
           />
+          {recibe && (
+            <div className="flex justify-center pb-8">
+              <Boton onClick={() => setCreando(true)}>
+                <Plus size={16} /> Crear la primera orden
+              </Boton>
+            </div>
+          )}
         </Tarjeta>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-2 xl:grid xl:grid-cols-5 xl:overflow-visible">
@@ -124,7 +131,13 @@ export default function Taller() {
                 </p>
 
                 {enColumna.map((o) => (
-                  <TarjetaOrden key={o.id} orden={o} destacar={meToca} onAbrir={setAbiertaId} />
+                  <TarjetaOrden
+                    key={o.id}
+                    orden={o}
+                    destacar={meToca}
+                    mia={o.mecanico_id === sesion.user.id}
+                    onAbrir={setAbiertaId}
+                  />
                 ))}
               </section>
             )
@@ -132,11 +145,14 @@ export default function Taller() {
         </div>
       )}
 
-      {recibiendo && (
-        <RecibirVehiculo
-          onCerrar={() => setRecibiendo(false)}
-          onGuardada={() => {
-            setRecibiendo(false)
+      {creando && (
+        <NuevaOrden
+          onCerrar={() => setCreando(false)}
+          onGuardada={(id) => {
+            /* Abrir la orden recién creada deja el próximo paso a la vista en
+               vez de dejar al usuario buscando su tarjeta en el tablero. */
+            setCreando(false)
+            setAbiertaId(id)
             recargar()
           }}
         />
@@ -149,7 +165,7 @@ export default function Taller() {
   )
 }
 
-function TarjetaOrden({ orden, destacar, onAbrir }) {
+function TarjetaOrden({ orden, destacar, mia = false, onAbrir }) {
   const etapa = etapaDe(orden.estado)
 
   return (
@@ -189,8 +205,12 @@ function TarjetaOrden({ orden, destacar, onAbrir }) {
         <span className="text-xs text-acero-500">{desde(orden.creada_en)}</span>
       </div>
 
-      {orden.mecanico?.nombre && (
-        <p className="mt-1.5 text-xs text-acero-500">{orden.mecanico.nombre}</p>
+      {orden.mecanico?.nombre ? (
+        <p className={`mt-1.5 text-xs ${mia ? 'font-semibold text-perez-700' : 'text-acero-500'}`}>
+          {mia ? 'Asignada a vos' : orden.mecanico.nombre}
+        </p>
+      ) : (
+        <p className="mt-1.5 text-xs text-atencion-700">Sin mecánico asignado</p>
       )}
     </Tarjeta>
   )
