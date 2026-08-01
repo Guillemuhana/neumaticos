@@ -468,7 +468,9 @@ grant execute on function public.entregar_orden(uuid) to authenticated;
 
 -- ---------------------------------------------------------------- personal
 
-create type tipo_fichada as enum ('ingreso', 'egreso');
+do $$ begin
+  create type tipo_fichada as enum ('ingreso', 'egreso');
+exception when duplicate_object then null; end $$;
 
 create table if not exists fichadas (
   id        uuid primary key default gen_random_uuid(),
