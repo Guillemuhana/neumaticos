@@ -173,7 +173,7 @@ function Paso({ numero, titulo, children }) {
   return (
     <section>
       <div className="mb-2 flex items-center gap-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-caucho-950 text-[0.6875rem] font-bold text-white">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-caucho-950 text-micro font-bold text-white">
           {numero}
         </span>
         <h3 className="display text-sm font-bold">{titulo}</h3>
@@ -348,7 +348,7 @@ function AltaRapida({ inicial, onCancelar, onCreado }) {
 
   return (
     <div className="space-y-3 rounded-lg border border-concreto-200 bg-concreto-50 p-3">
-      <p className="text-[0.8125rem] font-semibold text-caucho-800">Cliente nuevo</p>
+      <p className="text-menor font-semibold text-caucho-800">Cliente nuevo</p>
 
       <Campo etiqueta="Nombre completo">
         <input autoFocus className={estiloInput} {...campo('nombre')} />

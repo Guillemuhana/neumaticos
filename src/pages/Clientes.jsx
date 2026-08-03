@@ -198,7 +198,7 @@ function FormularioCliente({ cliente, onCerrar, onGuardado }) {
             el mostrador el cliente está esperando con el auto, y esto se puede
             completar después, antes de emitir el comprobante. */}
         <fieldset className="space-y-4 rounded-lg border border-concreto-200 p-3">
-          <legend className="px-1 text-[0.8125rem] font-bold uppercase tracking-wide text-acero-500">
+          <legend className="px-1 text-menor font-bold uppercase tracking-wide text-acero-500">
             Facturación
           </legend>
 

@@ -9,7 +9,8 @@ import {
   Aviso,
   Boton,
   Campo,
-  Cargando,
+  Encabezado,
+  Esqueleto,
   Etiqueta,
   Modal,
   Tarjeta,
@@ -122,20 +123,21 @@ export default function Stock() {
     <>
       {/* Título y resumen en un solo renglón. Lo de arriba no puede ocupar más
           alto que las primeras filas: lo que se viene a mirar es la lista. */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="display text-xl font-bold text-caucho-950">Stock</h1>
-          <p className="text-sm text-acero-500">
+      <Encabezado
+        titulo="Stock"
+        resumen={
+          <>
             {numero(resumen.articulos)} artículos · {numero(resumen.unidades)} unidades ·{' '}
             <span className="font-medium text-caucho-700">{plata(resumen.valor)}</span> a costo
-          </p>
-        </div>
+          </>
+        }
+      >
         {gestiona && (
-          <Boton onClick={() => setEditando(vacio)} className="px-3.5 py-2">
+          <Boton onClick={() => setEditando(vacio)}>
             <Plus size={16} /> Nuevo artículo
           </Boton>
         )}
-      </div>
+      </Encabezado>
 
       <Tarjeta className="mb-3 p-3">
         <div className="relative">
@@ -216,7 +218,7 @@ export default function Stock() {
 
       <Tarjeta className="overflow-hidden">
         {cargando ? (
-          <Cargando texto="Leyendo inventario…" alto="min-h-[40vh]" />
+          <Esqueleto filas={8} />
         ) : filtrados.length === 0 ? (
           <Vacio
             icono={Boxes}
@@ -243,7 +245,8 @@ export default function Stock() {
                     ].map(({ texto, extra = '' }) => (
                       <th
                         key={texto}
-                        className={`sticky top-0 bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-acero-500 ${extra}`}
+                        scope="col"
+                        className={`sticky top-0 bg-white px-4 py-2.5 text-micro font-semibold uppercase tracking-wide text-acero-500 ${extra}`}
                       >
                         {texto}
                       </th>
@@ -312,16 +315,16 @@ export default function Stock() {
                         >
                           {p.medida}
                         </td>
-                        <td data-label="Precio" className="px-4 py-2.5 font-semibold tabular-nums sm:text-right">
+                        <td data-label="Precio" className="cifra px-4 py-2.5 font-semibold">
                           {plata(p.precio)}
                         </td>
-                        <td data-label="Stock" className="px-4 py-2.5 sm:text-right">
+                        <td data-label="Stock" className="cifra px-4 py-2.5">
                           {/* Solo se etiqueta lo que necesita acción: un "OK" en
                               cada fila es ruido y esconde lo que sí importa. */}
                           <div className="flex items-center gap-2 sm:justify-end">
                             {critico && <Etiqueta tono="atencion">reponer</Etiqueta>}
                             <span
-                              className={`font-mono font-semibold tabular-nums ${
+                              className={`font-mono font-semibold ${
                                 critico ? 'text-atencion-700' : 'text-caucho-900'
                               }`}
                             >

@@ -26,7 +26,7 @@ const textoEstado = { cotizacion: 'Cotización', confirmada: 'Confirmada', anula
 export default function Ventas() {
   const navigate = useNavigate()
   const [creando, setCreando] = useState(false)
-  const [avisoFactura, setAvisoFactura] = useState('')
+  const [aviso, setAviso] = useState('')
 
   /* Los comprobantes vienen aparte y se cruzan acá: la venta y el comprobante
      no comparten tabla, y `comprobantes` la lee solo administración. */
@@ -48,18 +48,22 @@ export default function Ventas() {
     return { data: ventas.data.map((v) => ({ ...v, comprobante: porVenta.get(v.id) ?? null })) }
   }, [])
 
+  /* El error va al cartel de la pantalla y no a un `alert` del navegador: el
+     diálogo del sistema frena todo, se ve de otra época y encima aparece con
+     tipografía y botones que no son los de la app. */
   const cambiarEstado = async (venta, estado) => {
+    setAviso('')
     const { error } = await supabase.from('ventas').update({ estado }).eq('id', venta.id)
-    if (error) alert(error.message)
+    if (error) setAviso(error.message)
     recargar()
   }
 
   /* Arma el comprobante y deja al usuario en Facturación, que es donde se
      carga el CAE: facturar sin ir a ARCA a continuación no sirve de nada. */
   const facturar = async (venta) => {
-    setAvisoFactura('')
+    setAviso('')
     const { error } = await supabase.rpc('facturar_venta', { p_venta: venta.id })
-    if (error) return setAvisoFactura(error.message)
+    if (error) return setAviso(error.message)
     navigate('/facturacion')
   }
 
@@ -72,7 +76,7 @@ export default function Ventas() {
       </Encabezado>
 
       {error && <Aviso>{error}</Aviso>}
-      <Aviso>{avisoFactura}</Aviso>
+      <Aviso>{aviso}</Aviso>
 
       <Tarjeta>
         {cargando ? (

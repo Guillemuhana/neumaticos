@@ -97,7 +97,7 @@ export default function Layout() {
         <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-full" />
       </div>
 
-      <p className="mb-2 px-3 text-[0.6875rem] font-semibold uppercase tracking-wider text-acero-500">
+      <p className="mb-2 px-3 text-micro font-semibold uppercase tracking-wider text-acero-500">
         Gestión
       </p>
 
@@ -105,7 +105,7 @@ export default function Layout() {
 
       {itemsAyuda.length > 0 && (
         <>
-          <p className="mb-2 mt-6 px-3 text-[0.6875rem] font-semibold uppercase tracking-wider text-acero-500">
+          <p className="mb-2 mt-6 px-3 text-micro font-semibold uppercase tracking-wider text-acero-500">
             Ayuda
           </p>
           <nav className="flex flex-col gap-0.5">{itemsAyuda.map(enlace)}</nav>

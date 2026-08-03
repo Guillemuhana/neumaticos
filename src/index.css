@@ -8,6 +8,18 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
+  /* Dos pasos por debajo de `text-xs`, que hasta ahora se escribían a mano
+     como text-[0.6875rem] y text-[0.8125rem] en cada componente. Nombrarlos
+     es lo que los vuelve un sistema: si mañana el rótulo de tabla tiene que
+     crecer, se cambia acá y no en once archivos.
+
+       micro  rótulos de tabla, etiquetas de estado, texto en mayúsculas
+       menor  rótulos de campo, metadatos, títulos de bloque */
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1.45;
+  --text-menor: 0.8125rem;
+  --text-menor--line-height: 1.4;
+
   /* Escala completa: los pasos intermedios existen porque los componentes
      los usan. Un paso que falta no da error, simplemente no pinta nada. */
   --color-perez-900: #4E0E12;
@@ -60,9 +72,25 @@ body {
    convertirla en un objeto flotante. */
 .sombra-1 { box-shadow: 0 1px 2px rgba(14,16,19,.04), 0 1px 3px rgba(14,16,19,.05); }
 .sombra-2 { box-shadow: 0 2px 4px rgba(14,16,19,.04), 0 4px 12px -4px rgba(14,16,19,.10); }
+/* Solo para lo que flota sobre la pantalla: el diálogo. Sigue la misma
+   receta en capas que las otras dos en vez del `shadow-2xl` de Tailwind,
+   que es de otra familia y se notaba al lado de las tarjetas. */
+.sombra-3 { box-shadow: 0 4px 8px rgba(14,16,19,.06), 0 16px 40px -12px rgba(14,16,19,.28); }
 
-/* Números de tabla siempre alineados y sin ligaduras raras en las medidas. */
-.cifra { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+/* Toda cifra que se lee en columna: importes, stock, cantidades. El ancho
+   tabular hace que las unidades caigan una debajo de la otra, que es lo que
+   permite comparar dos filas de un vistazo sin leer los números. */
+.cifra {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  text-align: right;
+}
+
+/* En el celular la tabla se vuelve tarjetas y el rótulo va arriba del dato:
+   ahí alinear a la derecha deja la cifra suelta, lejos de lo que nombra. */
+@media (max-width: 639px) {
+  .cifra { text-align: left; }
+}
 
 ::selection {
   background: rgba(179, 38, 44, 0.18);
@@ -83,9 +111,17 @@ h1 { letter-spacing: -0.025em; }
   );
 }
 
+/* Una sola marca de foco para todo el sistema. Antes el botón se apartaba y
+   usaba un `ring` propio mientras el resto usaba este contorno: eran dos
+   lenguajes distintos para la misma idea, y al tabular por un formulario se
+   veía cambiar la forma del indicador de un control al siguiente.
+
+   2px en vez de 3: sigue siendo visible de sobra y no engorda los controles
+   chicos, como los iconos de las filas. */
 :focus-visible {
-  outline: 3px solid var(--color-perez-500);
+  outline: 2px solid var(--color-perez-500);
   outline-offset: 2px;
+  border-radius: 0.5rem;
 }
 
 /* ---- Movimiento -------------------------------------------------------

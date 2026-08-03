@@ -11,14 +11,14 @@ import { X } from 'lucide-react'
 
 export const estiloInput =
   'w-full rounded-lg border border-acero-200 bg-white px-3 py-2 text-sm ' +
-  'text-caucho-900 placeholder:text-acero-400 transition-colors ' +
+  'text-caucho-900 placeholder:text-acero-400 transition-colors duration-150 ' +
   'hover:border-acero-300 focus:border-perez-500 ' +
-  'disabled:cursor-not-allowed disabled:bg-concreto-100'
+  'disabled:cursor-not-allowed disabled:bg-concreto-100 disabled:text-acero-400'
 
 export function Campo({ etiqueta, ayuda, children }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[0.8125rem] font-medium text-caucho-800">{etiqueta}</span>
+      <span className="mb-1 block text-menor font-medium text-caucho-800">{etiqueta}</span>
       {children}
       {ayuda && <span className="mt-1 block text-xs text-acero-500">{ayuda}</span>}
     </label>
@@ -26,18 +26,29 @@ export function Campo({ etiqueta, ayuda, children }) {
 }
 
 export function Boton({ variante = 'primario', className = '', ...props }) {
+  /* El foco lo pone `:focus-visible` de index.css, igual que en cualquier otro
+     control. Antes acá había un `ring` propio: el botón terminaba siendo la
+     única pieza del sistema con su propia forma de marcar el foco. */
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold ' +
-    'transition-all duration-150 active:translate-y-px ' +
-    'disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0 ' +
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-perez-500 focus-visible:ring-offset-2'
+    'inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 ' +
+    'text-sm font-semibold transition-all duration-150 active:translate-y-px ' +
+    'disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0'
 
-  /* Sin degradados: un color plano envejece mejor y no compite con los datos. */
+  /* Sin degradados: un color plano envejece mejor y no compite con los datos.
+
+     Los que no llevan borde propio se lo ponen transparente: sin eso quedan
+     2px más bajos que un input o que un botón secundario, y al ponerlos en la
+     misma fila la hilera de controles queda despareja. Es la clase de detalle
+     que no se ve pero se nota. */
   const variantes = {
-    primario: 'bg-perez-600 text-white shadow-sm hover:bg-perez-700',
-    secundario: 'border border-acero-200 bg-white text-caucho-800 hover:border-acero-300 hover:bg-concreto-50',
-    fantasma: 'text-acero-500 hover:bg-concreto-100 hover:text-caucho-900',
-    peligro: 'border border-perez-200 bg-white text-perez-700 hover:bg-perez-50',
+    primario:
+      'border border-transparent bg-perez-600 text-white sombra-1 hover:bg-perez-700 active:bg-perez-800',
+    secundario:
+      'border border-acero-200 bg-white text-caucho-800 hover:border-acero-300 hover:bg-concreto-50 active:bg-concreto-100',
+    fantasma:
+      'border border-transparent text-acero-500 hover:bg-concreto-100 hover:text-caucho-900 active:bg-concreto-200',
+    peligro:
+      'border border-perez-200 bg-white text-perez-700 hover:bg-perez-50 active:bg-perez-100',
   }
 
   return <button className={`${base} ${variantes[variante]} ${className}`} {...props} />
@@ -83,11 +94,26 @@ export function Tarjeta({ className = '', ...props }) {
   )
 }
 
-export function Encabezado({ titulo, detalle, children }) {
+/* Dos formas del mismo encabezado.
+
+   Con `detalle` explica de qué va la pantalla y se pone abajo del título.
+   Con `resumen` acompaña al título en el mismo renglón: es para las pantallas
+   que son una lista larga, donde lo de arriba no puede robarle alto a las
+   primeras filas. Stock lo tenía escrito a mano por eso; ahora es una opción
+   del componente y no una excepción suelta. */
+export function Encabezado({ titulo, detalle, resumen, children }) {
   return (
-    <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-      <div>
+    /* `items-start` y `items-center` no pueden convivir en la lista: Tailwind
+       resuelve el empate por el orden del CSS generado, no por el orden en que
+       se escriben acá, así que cuál gana queda librado al azar. Se elige uno. */
+    <div
+      className={`flex flex-wrap justify-between gap-x-4 gap-y-3 ${
+        resumen ? 'mb-3 items-center' : 'mb-5 items-start'
+      }`}
+    >
+      <div className={resumen ? 'flex flex-wrap items-baseline gap-x-3 gap-y-1' : ''}>
         <h1 className="display text-xl font-bold text-caucho-950">{titulo}</h1>
+        {resumen && <p className="text-sm text-acero-500">{resumen}</p>}
         {detalle && <p className="mt-1 max-w-2xl text-sm text-acero-500">{detalle}</p>}
       </div>
       {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
@@ -126,7 +152,7 @@ export function Metrica({ icono: Icono, titulo, valor, pie, tono = 'neutro', cla
             <Icono size={14} aria-hidden="true" />
           </span>
         )}
-        <p className="text-[0.8125rem] font-medium text-acero-500">{titulo}</p>
+        <p className="text-menor font-medium text-acero-500">{titulo}</p>
       </div>
       {/* Cifras proporcionales: a este tamaño el ancho fijo se ve suelto. */}
       <p className="display mt-2 text-[1.75rem] font-bold leading-none text-caucho-950">{valor}</p>
@@ -146,32 +172,60 @@ export function Etiqueta({ tono = 'neutro', children }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[0.6875rem] font-semibold ring-1 ring-inset ${tonos[tono]}`}
+      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-micro font-semibold ring-1 ring-inset ${tonos[tono]}`}
     >
       {children}
     </span>
   )
 }
 
-/* La tabla scrollea sola: en el celular del taller no hay ancho para 6 columnas. */
+/* La tabla scrollea sola: en el celular del taller no hay ancho para 6 columnas.
+
+   Una columna puede declararse como `{ texto, cifra: true }` para que su
+   rótulo se alinee a la derecha, igual que los números que va a encabezar.
+   Un rótulo a la izquierda sobre una columna de importes alineados a la
+   derecha es la falla más común de una tabla, y la más fácil de arreglar. */
 export function Tabla({ columnas, children }) {
   return (
     <div className="overflow-x-auto">
       <table className="responsive-table w-full text-sm sm:min-w-[36rem]">
         <thead className="hidden sm:table-header-group">
           <tr className="border-b border-concreto-200 text-left">
-            {columnas.map((c) => (
-              <th
-                key={c}
-                className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-acero-500"
-              >
-                {c}
-              </th>
-            ))}
+            {columnas.map((c, i) => {
+              const { texto, cifra = false } = typeof c === 'string' ? { texto: c } : c
+              return (
+                <th
+                  key={texto || `col-${i}`}
+                  scope="col"
+                  className={`px-4 py-2.5 text-micro font-semibold uppercase tracking-wide text-acero-500 ${
+                    cifra ? 'text-right' : ''
+                  }`}
+                >
+                  {texto}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody className="divide-y divide-concreto-200">{children}</tbody>
       </table>
+    </div>
+  )
+}
+
+/* Mientras carga una tabla, filas grises del alto real en vez de un spinner
+   centrado: la pantalla no salta cuando llegan los datos, y se ve enseguida
+   que lo que viene es una lista y no un formulario. */
+export function Esqueleto({ filas = 6 }) {
+  return (
+    <div className="divide-y divide-concreto-200" role="status" aria-label="Cargando…">
+      {Array.from({ length: filas }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-3">
+          <span className="h-9 w-9 shrink-0 rounded-md bg-concreto-100" />
+          <span className="h-3 flex-1 rounded bg-concreto-100" style={{ maxWidth: `${40 - i * 3}%` }} />
+          <span className="h-3 w-16 rounded bg-concreto-100" />
+        </div>
+      ))}
     </div>
   )
 }
@@ -218,7 +272,7 @@ export function Modal({ titulo, onCerrar, children }) {
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
-        className="entrar flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        className="entrar sombra-3 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-concreto-200 bg-white px-5 py-3.5">
           <h2 className="display text-base font-bold">{titulo}</h2>

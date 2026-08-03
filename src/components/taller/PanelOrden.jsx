@@ -140,7 +140,7 @@ function Bloque({ titulo, children, accion }) {
   return (
     <section className="rounded-lg border border-concreto-200">
       <div className="flex items-center justify-between gap-2 border-b border-concreto-200 px-3 py-2">
-        <h3 className="text-[0.8125rem] font-bold uppercase tracking-wide text-acero-500">{titulo}</h3>
+        <h3 className="text-menor font-bold uppercase tracking-wide text-acero-500">{titulo}</h3>
         {accion}
       </div>
       <div className="p-3">{children}</div>

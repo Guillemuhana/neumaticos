@@ -60,7 +60,7 @@ function Indice({ secciones }) {
   return (
     <nav aria-label="Contenido del manual" className="no-imprimir mb-5 lg:mb-0">
       <div className="lg:sticky lg:top-6">
-        <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-acero-500">
+        <p className="mb-2 text-micro font-semibold uppercase tracking-wider text-acero-500">
           Contenido
         </p>
         <ol className="space-y-0.5">
