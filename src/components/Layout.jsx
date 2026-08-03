@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   BarChart3,
+  BookOpen,
   Boxes,
   Contact,
   FileText,
@@ -30,6 +31,13 @@ const navegacion = [
   { a: '/estadisticas', texto: 'Estadísticas', icono: BarChart3, roles: ['gerencia'] },
 ]
 
+/* El manual va en su propio grupo, abajo de todo: no es una pantalla de
+   trabajo, es a donde se va cuando algo no se entiende. Mezclarlo con las
+   demás lo convertiría en una parada más del recorrido diario. */
+const ayuda = [
+  { a: '/manual', texto: 'Manual de uso', icono: BookOpen, roles: ['gerencia', 'vendedor', 'mecanico'] },
+]
+
 const nombreRol = { gerencia: 'Gerencia', vendedor: 'Vendedor', mecanico: 'Mecánico' }
 
 const iniciales = (nombre = '') =>
@@ -47,6 +55,38 @@ export default function Layout() {
   const ubicacion = useLocation()
 
   const items = navegacion.filter((i) => i.roles.includes(rol))
+  const itemsAyuda = ayuda.filter((i) => i.roles.includes(rol))
+
+  /* Los dos grupos pintan igual, así que el enlace se arma una sola vez. */
+  const enlace = ({ a, texto, icono: Icono }) => (
+    <NavLink
+      key={a}
+      to={a}
+      end={a === '/'}
+      onClick={() => setAbierto(false)}
+      className={({ isActive }) =>
+        `group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
+          isActive
+            ? 'bg-perez-600 text-white'
+            : 'text-acero-300 hover:bg-white/[0.07] hover:text-white'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {/* Marca la fila activa aun para quien no distingue el rojo. */}
+          <span
+            aria-hidden="true"
+            className={`absolute -left-4 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-perez-500 transition-opacity ${
+              isActive ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+          <Icono size={17} aria-hidden="true" className="shrink-0" />
+          {texto}
+        </>
+      )}
+    </NavLink>
+  )
 
   const panel = (
     <div className="relative flex h-full flex-col overflow-hidden bg-caucho-950 p-4">
@@ -61,37 +101,16 @@ export default function Layout() {
         Gestión
       </p>
 
-      <nav className="flex flex-col gap-0.5">
-        {items.map(({ a, texto, icono: Icono }) => (
-          <NavLink
-            key={a}
-            to={a}
-            end={a === '/'}
-            onClick={() => setAbierto(false)}
-            className={({ isActive }) =>
-              `group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
-                isActive
-                  ? 'bg-perez-600 text-white'
-                  : 'text-acero-300 hover:bg-white/[0.07] hover:text-white'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {/* Marca la fila activa aun para quien no distingue el rojo. */}
-                <span
-                  aria-hidden="true"
-                  className={`absolute -left-4 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-perez-500 transition-opacity ${
-                    isActive ? 'opacity-100' : 'opacity-0'
-                  }`}
-                />
-                <Icono size={17} aria-hidden="true" className="shrink-0" />
-                {texto}
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+      <nav className="flex flex-col gap-0.5">{items.map(enlace)}</nav>
+
+      {itemsAyuda.length > 0 && (
+        <>
+          <p className="mb-2 mt-6 px-3 text-[0.6875rem] font-semibold uppercase tracking-wider text-acero-500">
+            Ayuda
+          </p>
+          <nav className="flex flex-col gap-0.5">{itemsAyuda.map(enlace)}</nav>
+        </>
+      )}
 
       <div className="mt-auto border-t border-white/10 pt-4">
         <div className="flex items-center gap-2.5 px-1">
@@ -125,11 +144,11 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
-      <aside className="hidden lg:block">
+      <aside className="no-imprimir hidden lg:block">
         <div className="sticky top-0 h-screen">{panel}</div>
       </aside>
 
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-concreto-200/80 bg-white/85 px-4 py-3 backdrop-blur-md lg:hidden">
+      <header className="no-imprimir sticky top-0 z-30 flex items-center justify-between border-b border-concreto-200/80 bg-white/85 px-4 py-3 backdrop-blur-md lg:hidden">
         <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-28" />
         <button
           onClick={() => setAbierto(true)}

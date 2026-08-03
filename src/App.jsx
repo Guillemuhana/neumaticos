@@ -11,6 +11,7 @@ import Facturacion from './pages/Facturacion'
 import Taller from './pages/Taller'
 import Personal from './pages/Personal'
 import Clientes from './pages/Clientes'
+import Manual from './pages/Manual'
 
 /* Estadísticas arrastra recharts (~300 kB). Es la única pantalla que lo usa y
    solo la ve gerencia: cargarla aparte le ahorra la descarga a todo el resto,
@@ -116,6 +117,9 @@ export default function App() {
           }
         />
         <Route path="/personal" element={<Personal />} />
+        {/* Sin `SoloRoles`: el manual lo ve todo el equipo y se filtra solo,
+            mostrándole a cada uno las secciones de su puesto. */}
+        <Route path="/manual" element={<Manual />} />
         <Route
           path="/clientes"
           element={

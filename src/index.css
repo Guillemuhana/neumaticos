@@ -142,15 +142,19 @@ h1 { letter-spacing: -0.025em; }
 }
 
 /* ---- Impresión --------------------------------------------------------
-   De toda la app, al papel va una sola cosa: el comprobante. El resto
+   Cuando hay un comprobante en pantalla, al papel va solo eso: el resto
    —barra lateral, modal, botones— se esconde, porque la hoja que se lleva el
    cliente no lleva interfaz. `.solo-impresion` se monta como hijo directo de
-   <body>, así que alcanza con ocultar a sus hermanos. */
+   <body>, así que alcanza con ocultar a sus hermanos.
+
+   El `:has()` es lo que hace que esta regla no se pase de rosca: sin él,
+   imprimir cualquier otra pantalla —el manual, una lista de stock— salía en
+   blanco, porque no había ningún `.solo-impresion` que mostrar. */
 @media print {
   @page { size: A4; margin: 12mm; }
 
   body { background: white; }
-  body > *:not(.solo-impresion) { display: none !important; }
+  body:has(.solo-impresion) > *:not(.solo-impresion) { display: none !important; }
   /* Sin `print-color-adjust`, el navegador descarta los fondos al imprimir y
      la fila de encabezados de los renglones sale sin su gris. */
   .solo-impresion {
@@ -158,6 +162,12 @@ h1 { letter-spacing: -0.025em; }
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
+  /* Navegación, botones e índices: en el papel no se puede hacer clic. */
+  .no-imprimir { display: none !important; }
+
+  /* El margen lo pone @page; el del layout duplicado desperdicia media hoja. */
+  main { padding: 0 !important; }
 }
 
 /* Tablas responsivas: filas tipo tarjeta para dispositivos móviles */
