@@ -3,9 +3,18 @@ import { useNavigate } from 'react-router-dom'
 import { Search, Plus, Wrench } from 'lucide-react'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
+import { CONDICIONES_IVA, condicionDe, cuitFormateado, cuitValido } from '../lib/fiscal'
 import { Aviso, Boton, Campo, Cargando, Encabezado, Modal, Tabla, Tarjeta, Vacio, estiloInput } from '../components/UI'
 
-const vacio = { nombre: '', telefono: '', email: '', documento: '' }
+const vacio = {
+  nombre: '',
+  telefono: '',
+  email: '',
+  documento: '',
+  cuit: '',
+  domicilio: '',
+  condicion_iva: 'consumidor_final',
+}
 
 export default function Clientes() {
   const navigate = useNavigate()
@@ -26,7 +35,7 @@ export default function Clientes() {
     const q = busqueda.trim().toLowerCase()
     if (!q) return datos
     return datos.filter((c) =>
-      `${c.nombre} ${c.telefono ?? ''} ${c.email ?? ''} ${c.documento ?? ''}`
+      `${c.nombre} ${c.telefono ?? ''} ${c.email ?? ''} ${c.documento ?? ''} ${c.cuit ?? ''}`
         .toLowerCase()
         .includes(q)
     )
@@ -66,7 +75,7 @@ export default function Clientes() {
             detalle={busqueda ? 'Probá con otra búsqueda.' : 'Cargá tu primer cliente.'}
           />
         ) : (
-          <Tabla columnas={['Nombre', 'Teléfono', 'Email', 'Documento', '']}>
+          <Tabla columnas={['Nombre', 'Teléfono', 'Email', 'CUIT / Documento', 'Frente al IVA', '']}>
             {filtrados.map((c) => (
               <tr key={c.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
                 <td data-label="Nombre" className="px-4 py-3 font-medium">
@@ -78,8 +87,13 @@ export default function Clientes() {
                 <td data-label="Email" className="px-4 py-3">
                   {c.email ?? '—'}
                 </td>
-                <td data-label="Documento" className="px-4 py-3 font-mono">
-                  {c.documento ?? '—'}
+                {/* El CUIT tapa al documento porque es el que se factura; el
+                    documento queda de respaldo para el consumidor final. */}
+                <td data-label="CUIT / Documento" className="px-4 py-3 font-mono">
+                  {c.cuit ? cuitFormateado(c.cuit) : c.documento ?? '—'}
+                </td>
+                <td data-label="Frente al IVA" className="px-4 py-3 text-acero-500">
+                  {condicionDe(c.condicion_iva).texto}
                 </td>
                 <td data-label="Acciones" className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1">
@@ -129,8 +143,18 @@ function FormularioCliente({ cliente, onCerrar, onGuardado }) {
   /* `seguirAOrden` viaja como argumento y no por estado: si se guardara con
      setState, el submit leería el valor anterior y el botón haría lo que
      hizo el de al lado la vez pasada. */
+  const cuitCargado = form.cuit?.trim() ?? ''
+  const cuitMal = cuitCargado && !cuitValido(cuitCargado)
+  const condicion = condicionDe(form.condicion_iva)
+
   const guardar = async (e, seguirAOrden = false) => {
     e.preventDefault()
+
+    /* Se avisa acá y no al facturar: un CUIT mal tipeado recién se descubre
+       cuando ARCA rechaza el comprobante, y para entonces el cliente ya se
+       fue con el auto. */
+    if (cuitMal) return setError('El CUIT no es válido: revisá el dígito verificador.')
+
     setGuardando(true)
     setError('')
 
@@ -139,6 +163,9 @@ function FormularioCliente({ cliente, onCerrar, onGuardado }) {
       telefono: form.telefono?.trim() || null,
       email: form.email?.trim() || null,
       documento: form.documento?.trim() || null,
+      cuit: cuitCargado || null,
+      domicilio: form.domicilio?.trim() || null,
+      condicion_iva: form.condicion_iva ?? 'consumidor_final',
     }
 
     const { data, error } = form.id
@@ -166,6 +193,45 @@ function FormularioCliente({ cliente, onCerrar, onGuardado }) {
         <Campo etiqueta="Documento">
           <input className={estiloInput} {...campo('documento')} />
         </Campo>
+
+        {/* Lo que hace falta para facturarle. Va abajo y sin obligar nada: en
+            el mostrador el cliente está esperando con el auto, y esto se puede
+            completar después, antes de emitir el comprobante. */}
+        <fieldset className="space-y-4 rounded-lg border border-concreto-200 p-3">
+          <legend className="px-1 text-[0.8125rem] font-bold uppercase tracking-wide text-acero-500">
+            Facturación
+          </legend>
+
+          <Campo
+            etiqueta="Condición frente al IVA"
+            ayuda="Decide la letra del comprobante: al Responsable Inscripto le va Factura A."
+          >
+            <select className={estiloInput} {...campo('condicion_iva')}>
+              {CONDICIONES_IVA.map((c) => (
+                <option key={c.valor} value={c.valor}>
+                  {c.texto}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
+          <Campo
+            etiqueta="CUIT"
+            ayuda={
+              cuitMal
+                ? 'Dígito verificador incorrecto.'
+                : condicion.exigeCuit
+                  ? 'Obligatorio para esta condición.'
+                  : null
+            }
+          >
+            <input className={estiloInput} placeholder="20-12345678-9" {...campo('cuit')} />
+          </Campo>
+
+          <Campo etiqueta="Domicilio">
+            <input className={estiloInput} {...campo('domicilio')} />
+          </Campo>
+        </fieldset>
 
         <Aviso>{error}</Aviso>
 

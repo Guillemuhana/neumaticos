@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { Check, Plus, Receipt, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Check, FileText, Plus, Receipt, Trash2 } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { fecha, plata } from '../lib/formato'
+import { estadoDe } from '../lib/fiscal'
 import {
   Aviso,
   Boton,
@@ -22,22 +24,43 @@ const tonoEstado = { cotizacion: 'neutro', confirmada: 'conforme', anulada: 'ate
 const textoEstado = { cotizacion: 'Cotización', confirmada: 'Confirmada', anulada: 'Anulada' }
 
 export default function Ventas() {
+  const navigate = useNavigate()
   const [creando, setCreando] = useState(false)
+  const [avisoFactura, setAvisoFactura] = useState('')
 
-  const { datos, cargando, error, recargar } = useConsulta(
-    () =>
+  /* Los comprobantes vienen aparte y se cruzan acá: la venta y el comprobante
+     no comparten tabla, y `comprobantes` la lee solo administración. */
+  const { datos, cargando, error, recargar } = useConsulta(async () => {
+    const [ventas, comprobantes] = await Promise.all([
       supabase
         .from('ventas')
         .select('*, clientes(nombre), perfiles(nombre), venta_items(cantidad)')
         .order('creada_en', { ascending: false })
         .limit(100),
-    []
-  )
+      supabase.from('comprobantes').select('venta_id, estado'),
+    ])
+
+    const fallo = ventas.error || comprobantes.error
+    if (fallo) return { error: fallo }
+
+    const porVenta = new Map(comprobantes.data.map((c) => [c.venta_id, c]))
+
+    return { data: ventas.data.map((v) => ({ ...v, comprobante: porVenta.get(v.id) ?? null })) }
+  }, [])
 
   const cambiarEstado = async (venta, estado) => {
     const { error } = await supabase.from('ventas').update({ estado }).eq('id', venta.id)
     if (error) alert(error.message)
     recargar()
+  }
+
+  /* Arma el comprobante y deja al usuario en Facturación, que es donde se
+     carga el CAE: facturar sin ir a ARCA a continuación no sirve de nada. */
+  const facturar = async (venta) => {
+    setAvisoFactura('')
+    const { error } = await supabase.rpc('facturar_venta', { p_venta: venta.id })
+    if (error) return setAvisoFactura(error.message)
+    navigate('/facturacion')
   }
 
   return (
@@ -49,6 +72,7 @@ export default function Ventas() {
       </Encabezado>
 
       {error && <Aviso>{error}</Aviso>}
+      <Aviso>{avisoFactura}</Aviso>
 
       <Tarjeta>
         {cargando ? (
@@ -56,7 +80,9 @@ export default function Ventas() {
         ) : !datos?.length ? (
           <Vacio icono={Receipt} titulo="Todavía no hay ventas" detalle="Cargá la primera desde «Nueva venta»." />
         ) : (
-          <Tabla columnas={['Fecha', 'Cliente', 'Vendedor', 'Ítems', 'Total', 'Estado', '']}>
+          <Tabla
+            columnas={['Fecha', 'Cliente', 'Vendedor', 'Ítems', 'Total', 'Estado', 'Comprobante', '']}
+          >
             {datos.map((v) => (
               <tr key={v.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
                 <td data-label="Fecha" className="px-4 py-3 whitespace-nowrap text-acero-500">
@@ -77,13 +103,30 @@ export default function Ventas() {
                 <td data-label="Estado" className="px-4 py-3">
                   <Etiqueta tono={tonoEstado[v.estado]}>{textoEstado[v.estado]}</Etiqueta>
                 </td>
+                <td data-label="Comprobante" className="px-4 py-3">
+                  {v.comprobante ? (
+                    <Etiqueta tono={estadoDe(v.comprobante.estado).tono}>
+                      {estadoDe(v.comprobante.estado).texto}
+                    </Etiqueta>
+                  ) : (
+                    <span className="text-acero-500">—</span>
+                  )}
+                </td>
                 <td data-label="Acciones" className="px-4 py-3 text-right">
                   {v.estado === 'cotizacion' && (
                     <Boton variante="fantasma" className="px-2 py-1" onClick={() => cambiarEstado(v, 'confirmada')}>
                       <Check size={15} /> Confirmar
                     </Boton>
                   )}
-                  {v.estado === 'confirmada' && (
+                  {v.estado === 'confirmada' && !v.comprobante && (
+                    <Boton variante="fantasma" className="px-2 py-1" onClick={() => facturar(v)}>
+                      <FileText size={15} /> Facturar
+                    </Boton>
+                  )}
+                  {/* Una venta ya facturada ante ARCA no se anula acá: hay un
+                      comprobante con CAE dando vueltas, y eso se revierte con
+                      una nota de crédito, que todavía no está. */}
+                  {v.estado === 'confirmada' && v.comprobante?.estado !== 'emitido' && (
                     <Boton variante="fantasma" className="px-2 py-1" onClick={() => cambiarEstado(v, 'anulada')}>
                       Anular
                     </Boton>

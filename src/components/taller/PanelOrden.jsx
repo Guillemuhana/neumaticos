@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
-import { ArrowRight, Plus, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowRight, FileText, Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthProvider'
 import { useConsulta } from '../../hooks/useConsulta'
 import { supabase } from '../../lib/supabase'
 import { fecha, numero, plata } from '../../lib/formato'
+import { estadoDe, numeroComprobante, tipoDe } from '../../lib/fiscal'
 import { avanceDe, etapaDe, puedeEditarPlan, puedeEditarRecepcion } from '../../lib/taller'
 import { Aviso, Boton, Campo, Cargando, Etiqueta, Modal, estiloInput } from '../UI'
 
@@ -100,6 +102,13 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
             libre. RLS deja escribir la orden a los dos roles. */}
         {['gerencia', 'vendedor'].includes(rol) && orden.estado !== 'entregada' && (
           <AsignarMecanico orden={orden} onGuardado={onCambio} />
+        )}
+
+        {/* Entregar deja el comprobante armado; acá se ve en qué quedó sin
+            tener que ir a buscarlo. El mecánico no lo ve: RLS no le devuelve
+            los comprobantes, así que ni siquiera se consulta. */}
+        {['gerencia', 'vendedor'].includes(rol) && orden.venta_id && (
+          <Comprobante ventaId={orden.venta_id} />
         )}
 
         <Trazabilidad orden={orden} />
@@ -515,6 +524,47 @@ function AsignarMecanico({ orden, onGuardado }) {
         </select>
       </Campo>
       <Aviso>{error}</Aviso>
+    </Bloque>
+  )
+}
+
+/* El tramo que sigue a la entrega: la orden ya está cerrada y lo que queda es
+   el papel. Muestra si ARCA ya lo autorizó y, si falta, lleva al escritorio
+   donde se hace. */
+function Comprobante({ ventaId }) {
+  const navigate = useNavigate()
+
+  const { datos, cargando, error } = useConsulta(
+    () => supabase.from('comprobantes').select('*').eq('venta_id', ventaId).maybeSingle(),
+    [ventaId]
+  )
+
+  if (cargando) return null
+
+  return (
+    <Bloque titulo="Comprobante">
+      {error && <Aviso>{error}</Aviso>}
+
+      {!datos ? (
+        <p className="text-sm text-acero-500">
+          La entrega no dejó comprobante: la orden se cerró sin renglones para facturar.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-caucho-900">
+              {tipoDe(datos.tipo).texto}{' '}
+              <span className="font-mono text-xs text-acero-500">{numeroComprobante(datos)}</span>
+            </p>
+            <p className="mt-1">
+              <Etiqueta tono={estadoDe(datos.estado).tono}>{estadoDe(datos.estado).texto}</Etiqueta>
+            </p>
+          </div>
+          <Boton variante="secundario" onClick={() => navigate('/facturacion')}>
+            <FileText size={15} /> Ir a Facturación
+          </Boton>
+        </div>
+      )}
     </Bloque>
   )
 }

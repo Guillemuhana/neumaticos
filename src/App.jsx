@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Inicio from './pages/Inicio'
 import Stock from './pages/Stock'
 import Ventas from './pages/Ventas'
+import Facturacion from './pages/Facturacion'
 import Taller from './pages/Taller'
 import Personal from './pages/Personal'
 import Clientes from './pages/Clientes'
@@ -91,6 +92,16 @@ export default function App() {
           element={
             <SoloRoles roles={['gerencia', 'vendedor']}>
               <Ventas />
+            </SoloRoles>
+          }
+        />
+        <Route
+          path="/facturacion"
+          element={
+            /* Escritorio de administración: el mecánico no ve datos fiscales
+               ni importes del cliente, y RLS se lo niega igual. */
+            <SoloRoles roles={['gerencia', 'vendedor']}>
+              <Facturacion />
             </SoloRoles>
           }
         />

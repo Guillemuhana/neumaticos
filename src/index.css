@@ -141,6 +141,25 @@ h1 { letter-spacing: -0.025em; }
   .elevar:hover { transform: none; }
 }
 
+/* ---- Impresión --------------------------------------------------------
+   De toda la app, al papel va una sola cosa: el comprobante. El resto
+   —barra lateral, modal, botones— se esconde, porque la hoja que se lleva el
+   cliente no lleva interfaz. `.solo-impresion` se monta como hijo directo de
+   <body>, así que alcanza con ocultar a sus hermanos. */
+@media print {
+  @page { size: A4; margin: 12mm; }
+
+  body { background: white; }
+  body > *:not(.solo-impresion) { display: none !important; }
+  /* Sin `print-color-adjust`, el navegador descarta los fondos al imprimir y
+     la fila de encabezados de los renglones sale sin su gris. */
+  .solo-impresion {
+    display: block !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 /* Tablas responsivas: filas tipo tarjeta para dispositivos móviles */
 @media (max-width: 639px) {
   .responsive-table {
