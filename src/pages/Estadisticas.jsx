@@ -18,7 +18,15 @@ import { supabase } from '../lib/supabase'
 import { numero, plata } from '../lib/formato'
 import { ETAPAS, etapaDe } from '../lib/taller'
 import { Aviso, Boton, Cargando, Encabezado, Metrica } from '../components/UI'
-import { MARCA, PanelGrafico, Tooltip, ejeComun } from '../components/Grafico'
+import {
+  GRIS_EJE,
+  GRIS_FONDO,
+  GRIS_LINEA,
+  MARCA,
+  PanelGrafico,
+  Tooltip,
+  ejeComun,
+} from '../components/Grafico'
 
 const periodos = [
   { dias: 7, texto: '7 días' },
@@ -336,11 +344,11 @@ export default function Estadisticas() {
           >
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={porDia} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-                <CartesianGrid stroke="#E5E7E2" vertical={false} />
+                <CartesianGrid stroke={GRIS_LINEA} vertical={false} />
                 <XAxis dataKey="dia" {...ejeComun} interval="preserveStartEnd" minTickGap={24} />
                 <YAxis {...ejeComun} width={64} tickFormatter={(v) => numero(v)} />
                 <TooltipRecharts
-                  cursor={{ stroke: '#AEB6C0' }}
+                  cursor={{ stroke: GRIS_EJE }}
                   content={<Tooltip formato={plata} />}
                 />
                 <Area
@@ -369,10 +377,10 @@ export default function Estadisticas() {
         >
           <ResponsiveContainer width="100%" height={Math.max(200, porVendedor.length * 48)}>
             <BarChart data={porVendedor} layout="vertical" margin={{ top: 4, right: 16, bottom: 0, left: 8 }}>
-              <CartesianGrid stroke="#E5E7E2" horizontal={false} />
+              <CartesianGrid stroke={GRIS_LINEA} horizontal={false} />
               <XAxis type="number" {...ejeComun} tickFormatter={(v) => numero(v)} />
               <YAxis type="category" dataKey="nombre" {...ejeComun} width={110} />
-              <TooltipRecharts cursor={{ fill: '#F2F3F0' }} content={<Tooltip formato={plata} />} />
+              <TooltipRecharts cursor={{ fill: GRIS_FONDO }} content={<Tooltip formato={plata} />} />
               <Bar dataKey="total" fill={MARCA} barSize={24} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -387,10 +395,10 @@ export default function Estadisticas() {
         >
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={porEtapa} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-              <CartesianGrid stroke="#E5E7E2" vertical={false} />
+              <CartesianGrid stroke={GRIS_LINEA} vertical={false} />
               <XAxis dataKey="etapa" {...ejeComun} interval={0} />
               <YAxis {...ejeComun} width={40} allowDecimals={false} />
-              <TooltipRecharts cursor={{ fill: '#F2F3F0' }} content={<Tooltip formato={numero} />} />
+              <TooltipRecharts cursor={{ fill: GRIS_FONDO }} content={<Tooltip formato={numero} />} />
               <Bar dataKey="cantidad" fill={MARCA} barSize={40} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -405,10 +413,10 @@ export default function Estadisticas() {
         >
           <ResponsiveContainer width="100%" height={Math.max(200, porMecanico.length * 48)}>
             <BarChart data={porMecanico} layout="vertical" margin={{ top: 4, right: 16, bottom: 0, left: 8 }}>
-              <CartesianGrid stroke="#E5E7E2" horizontal={false} />
+              <CartesianGrid stroke={GRIS_LINEA} horizontal={false} />
               <XAxis type="number" {...ejeComun} allowDecimals={false} />
               <YAxis type="category" dataKey="nombre" {...ejeComun} width={110} />
-              <TooltipRecharts cursor={{ fill: '#F2F3F0' }} content={<Tooltip formato={numero} />} />
+              <TooltipRecharts cursor={{ fill: GRIS_FONDO }} content={<Tooltip formato={numero} />} />
               <Bar dataKey="cantidad" fill={MARCA} barSize={24} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>

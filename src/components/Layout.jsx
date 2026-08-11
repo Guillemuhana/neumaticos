@@ -67,17 +67,17 @@ export default function Layout() {
       className={({ isActive }) =>
         `group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
           isActive
-            ? 'bg-perez-600 text-white'
-            : 'text-acero-300 hover:bg-white/[0.07] hover:text-white'
+            ? 'bg-perez-100 text-perez-800'
+            : 'text-caucho-800 hover:bg-white hover:text-caucho-950'
         }`
       }
     >
       {({ isActive }) => (
         <>
-          {/* Marca la fila activa aun para quien no distingue el rojo. */}
+          {/* Marca la fila activa aun para quien no distingue el acento. */}
           <span
             aria-hidden="true"
-            className={`absolute -left-4 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-perez-500 transition-opacity ${
+            className={`absolute -left-4 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-perez-600 transition-opacity ${
               isActive ? 'opacity-100' : 'opacity-0'
             }`}
           />
@@ -89,13 +89,22 @@ export default function Layout() {
   )
 
   const panel = (
-    <div className="relative flex h-full flex-col overflow-hidden bg-caucho-950 p-4">
+    /* Barra clara, plana, separada del contenido por una línea y no por un
+       bloque de color: la jerarquía la hace el fondo hueso de la página, que
+       es apenas más claro que este gris. */
+    <div className="relative flex h-full flex-col overflow-hidden border-r border-concreto-200 bg-concreto-100 p-4">
       {/* Franja del logo, apenas insinuada: ubica la marca sin gritar. */}
       <span className="franja absolute inset-y-0 left-0 w-0.5 opacity-60" aria-hidden="true" />
 
       <div className="mb-6 rounded-lg bg-white px-3 py-2.5">
         <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-full" />
       </div>
+
+      {/* El rol de quien entró va acá arriba, en el azul del acento: es el
+          dato que explica por qué el menú tiene estas entradas y no otras. */}
+      <p className="mb-4 px-3 text-micro font-semibold uppercase tracking-wider text-perez-700">
+        {nombreRol[rol] ?? 'Gestión'}
+      </p>
 
       <p className="mb-2 px-3 text-micro font-semibold uppercase tracking-wider text-acero-500">
         Gestión
@@ -112,13 +121,13 @@ export default function Layout() {
         </>
       )}
 
-      <div className="mt-auto border-t border-white/10 pt-4">
+      <div className="mt-auto border-t border-concreto-200 pt-4">
         <div className="flex items-center gap-2.5 px-1">
           {perfil?.imagen_url ? (
             <img
               src={perfil.imagen_url}
               alt=""
-              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/15"
+              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-acero-200"
             />
           ) : (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-perez-600 text-xs font-bold text-white">
@@ -126,14 +135,14 @@ export default function Layout() {
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">{perfil?.nombre}</p>
+            <p className="truncate text-sm font-semibold text-caucho-950">{perfil?.nombre}</p>
             <p className="text-xs text-acero-500">{nombreRol[rol] ?? '—'}</p>
           </div>
           <button
             onClick={cerrarSesion}
             aria-label="Salir"
             title="Salir"
-            className="shrink-0 rounded-lg p-2 text-acero-400 transition-colors hover:bg-white/10 hover:text-white"
+            className="shrink-0 rounded-lg p-2 text-acero-500 transition-colors hover:bg-white hover:text-caucho-950"
           >
             <LogOut size={16} />
           </button>
@@ -170,7 +179,7 @@ export default function Layout() {
             <button
               onClick={() => setAbierto(false)}
               aria-label="Cerrar menú"
-              className="absolute right-3 top-3 z-10 rounded-xl p-2 text-acero-300 transition-colors hover:bg-white/10 hover:text-white"
+              className="absolute right-3 top-3 z-10 rounded-xl p-2 text-acero-500 transition-colors hover:bg-white hover:text-caucho-950"
             >
               <X size={20} />
             </button>

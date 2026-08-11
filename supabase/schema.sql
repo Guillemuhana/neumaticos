@@ -654,6 +654,30 @@ do $$ begin
   end if;
 end $$;
 
+-- ------------------------------------------------- fotos del vehículo
+-- El registro visual del auto. Cuelgan de la orden y no del cliente porque lo
+-- que queda documentado es *este* ingreso: el mismo auto vuelve a los seis
+-- meses con otro rayón, y las dos tandas tienen que convivir sin pisarse. La
+-- ficha del cliente las muestra igual, recorriendo sus órdenes.
+do $$ begin
+  create type momento_foto as enum ('ingreso', 'trabajo', 'entrega');
+exception when duplicate_object then null; end $$;
+
+create table if not exists orden_fotos (
+  id         uuid primary key default gen_random_uuid(),
+  orden_id   uuid not null references ordenes on delete cascade,
+  momento    momento_foto not null default 'ingreso',
+  -- La ruta dentro del bucket, no la URL. La URL pública se arma al vuelo con
+  -- getPublicUrl; guardarla congelaría un enlace que deja de servir el día que
+  -- el bucket pase a privado y las fotos haya que firmarlas.
+  ruta       text not null unique,
+  nota       text,
+  subida_por uuid references perfiles on delete set null,
+  creada_en  timestamptz not null default now()
+);
+
+create index if not exists orden_fotos_orden_idx on orden_fotos (orden_id, momento);
+
 -- --------------------------------------------------- avance de las órdenes
 -- El guardián del circuito. Cada transición dice desde dónde sale y quién
 -- puede hacerla; lo que no está listado, no pasa. Los sellos de tiempo los
@@ -937,6 +961,27 @@ create policy orden_items_escribir on orden_items for all to authenticated
     public.mi_rol() in ('gerencia', 'vendedor')
     and exists (select 1 from ordenes o where o.id = orden_id and o.estado <> 'entregada')
   );
+
+-- Las fotos las saca quien tiene el auto delante: recepción cuando lo recibe y
+-- el mecánico mientras trabaja. No hay política de update a propósito —una
+-- foto no se corrige, se saca otra— y borrar es de gerencia, para la que salió
+-- movida. Una vez entregada la orden no se le agregan fotos: el registro de
+-- ese ingreso queda cerrado igual que su comprobante.
+alter table orden_fotos enable row level security;
+
+drop policy if exists orden_fotos_leer on orden_fotos;
+create policy orden_fotos_leer on orden_fotos for select to authenticated using (true);
+
+drop policy if exists orden_fotos_crear on orden_fotos;
+create policy orden_fotos_crear on orden_fotos for insert to authenticated
+  with check (
+    subida_por = auth.uid()
+    and exists (select 1 from ordenes o where o.id = orden_id and o.estado <> 'entregada')
+  );
+
+drop policy if exists orden_fotos_borrar on orden_fotos;
+create policy orden_fotos_borrar on orden_fotos for delete to authenticated
+  using (public.es_gerencia());
 
 -- Facturación: es escritorio de administración. El mecánico no ve importes
 -- del cliente ni datos fiscales, y no tiene por qué.

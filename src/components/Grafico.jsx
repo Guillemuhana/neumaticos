@@ -4,9 +4,15 @@ import { Tarjeta } from './UI'
    Una sola hue por gráfico: la identidad la dan los ejes, no el color, así que
    no hace falta paleta categórica (y se evita el par rojo/verde, que bajo
    deuteranopía queda en ΔE 6.5 y es indistinguible). */
-export const MARCA = '#B3262C'
-export const GRIS_EJE = '#AEB6C0'
-export const GRIS_TEXTO = '#6B7684'
+export const MARCA = '#1789A8'
+export const GRIS_EJE = '#B0B0AC'
+export const GRIS_TEXTO = '#6B6B6B'
+/* Recharts pinta con atributos SVG y no lee las clases de Tailwind, así que
+   la grilla y el resaltado de la barra bajo el cursor necesitan el valor
+   literal. Salen de acá y no escritos a mano en cada gráfico, que es lo que
+   hacía que al cambiar la paleta quedaran grises de la anterior. */
+export const GRIS_LINEA = '#E2E2DE'
+export const GRIS_FONDO = '#EDEDEB'
 
 export const ejeComun = {
   stroke: GRIS_EJE,

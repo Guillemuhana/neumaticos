@@ -1,12 +1,23 @@
 @import "tailwindcss";
 
 /* ---- Tokens de marca -------------------------------------------------
-   Rojo Pérez tomado del logo (#B3262C) · caucho (grafito de taller)
-   concreto (superficie de trabajo) · ámbar de atención · verde conforme */
+   Paleta editorial: azul petróleo de acento (#1789A8) · neutros casi negros
+   sobre fondo hueso · rosa/bordó para lo que alerta · verde para lo conforme.
+   Los títulos van en serif y los datos en sans: la jerarquía la hace la
+   tipografía, no el color ni las sombras.
+
+   Las familias mantienen sus nombres —`perez` es el acento de marca, no "el
+   rojo"— para que el cambio de paleta llegue a las 22 pantallas sin tener que
+   reescribir una clase en cada archivo. */
 @theme {
-  --font-display: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Lora", Georgia, "Times New Roman", serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Radios contenidos: el cliente pidió 6–10px. `xl` baja de 12 a 10 acá y
+     todos los `rounded-xl` del sistema se achican solos. */
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
 
   /* Dos pasos por debajo de `text-xs`, que hasta ahora se escribían a mano
      como text-[0.6875rem] y text-[0.8125rem] en cada componente. Nombrarlos
@@ -21,33 +32,41 @@
   --text-menor--line-height: 1.4;
 
   /* Escala completa: los pasos intermedios existen porque los componentes
-     los usan. Un paso que falta no da error, simplemente no pinta nada. */
-  --color-perez-900: #4E0E12;
-  --color-perez-800: #6E141A;
-  --color-perez-700: #8E1B22;
-  --color-perez-600: #B3262C;
-  --color-perez-500: #C8323A;
-  --color-perez-300: #E4737A;
-  --color-perez-200: #EFC3C6;
-  --color-perez-100: #F6DADC;
-  --color-perez-50:  #FBEEEF;
+     los usan. Un paso que falta no da error, simplemente no pinta nada.
 
-  --color-caucho-950: #0E1013;
-  --color-caucho-900: #16181C;
-  --color-caucho-800: #22262C;
-  --color-caucho-700: #313842;
-  --color-acero-500: #6B7684;
-  --color-acero-400: #8A94A2;
-  --color-acero-300: #AEB6C0;
-  --color-acero-200: #D7DBE0;
-  --color-concreto-50: #FAFAF8;
-  --color-concreto-100: #F2F3F0;
-  --color-concreto-200: #E5E7E2;
+     `perez` es ahora el azul petróleo del acento (#1789A8 en el paso 600, que
+     es el que pinta los botones primarios y el estado activo). */
+  --color-perez-900: #0A3D4B;
+  --color-perez-800: #0D5064;
+  --color-perez-700: #126B84;
+  --color-perez-600: #1789A8;
+  --color-perez-500: #2E9CBA;
+  --color-perez-300: #7FC6D9;
+  --color-perez-200: #B6DFEC;
+  --color-perez-100: #D7EEF5;
+  --color-perez-50:  #ECF7FA;
 
-  --color-atencion-700: #92400E;
-  --color-atencion-600: #B45309;
-  --color-atencion-100: #FCE9CF;
-  --color-atencion-50:  #FEF6EC;
+  /* Neutros sin tinte: antes tiraban a azul, y al lado de un acento que ahora
+     también es azul el gris dejaba de leerse como gris. */
+  --color-caucho-950: #0B0B0B;
+  --color-caucho-900: #171717;
+  --color-caucho-800: #242424;
+  --color-caucho-700: #3A3A38;
+  --color-acero-500: #6B6B6B;
+  --color-acero-400: #8C8C89;
+  --color-acero-300: #B0B0AC;
+  --color-acero-200: #D6D6D1;
+  --color-concreto-50: #F9F9F7;
+  --color-concreto-100: #EDEDEB;
+  --color-concreto-200: #E2E2DE;
+
+  /* Rosa/bordó, no ámbar: en esta paleta lo que alerta y lo que está a medio
+     camino (stock bajo, control de calidad, orden recién creada) comparten
+     familia, y el ámbar quedaba como un tercer color suelto. */
+  --color-atencion-700: #8E2536;
+  --color-atencion-600: #B03349;
+  --color-atencion-100: #F7D8DE;
+  --color-atencion-50:  #FDF1F3;
 
   --color-conforme-700: #14603D;
   --color-conforme-500: #1C8A57;
@@ -62,7 +81,7 @@ body {
   font-family: var(--font-sans);
   /* Fondo plano. El degradado radial anterior competía con las tarjetas y
      hacía que el blanco se leyera sucio en la mitad oscura de la pantalla. */
-  background: #F1F0EC;
+  background: #F4F4F2;
   color: var(--color-caucho-900);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -93,14 +112,15 @@ body {
 }
 
 ::selection {
-  background: rgba(179, 38, 44, 0.18);
+  background: rgba(23, 137, 168, 0.20);
   color: var(--color-caucho-950);
 }
 
-h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.02em; }
-
-/* Los títulos grandes necesitan más ajuste óptico que los chicos. */
-h1 { letter-spacing: -0.025em; }
+/* La serif ya trae su propio ritmo de espaciado: el ajuste que necesitaba la
+   sans anterior acá junta las letras y ensucia las mayúsculas. Apenas un
+   toque, y solo en los títulos grandes. */
+h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.005em; }
+h1 { letter-spacing: -0.012em; }
 
 /* Cinta diagonal: retoma el listón del logo. Único gesto decorativo. */
 .franja {
