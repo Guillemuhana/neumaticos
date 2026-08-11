@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Check, Search, UserPlus } from 'lucide-react'
+import { Car, Check, Plus, Search, UserPlus } from 'lucide-react'
 import { useAuth } from '../../context/AuthProvider'
 import { useConsulta } from '../../hooks/useConsulta'
 import { supabase } from '../../lib/supabase'
+import { errorDeVehiculo, nombreVehiculo, patenteNormal } from '../../lib/vehiculos'
 import { Aviso, Boton, Campo, Modal, estiloInput } from '../UI'
 
 /* Alta de la orden, tal como pasa en el mostrador: quién es el cliente, qué
@@ -13,8 +14,6 @@ import { Aviso, Boton, Campo, Modal, estiloInput } from '../UI'
    tablero del taller: valorizarla se puede hacer después, desde el panel. */
 
 const VACIO = {
-  vehiculo: '',
-  patente: '',
   kilometraje: '',
   falla_reportada: '',
   notas: '',
@@ -25,6 +24,9 @@ export default function NuevaOrden({ clienteInicial = null, onCerrar, onGuardada
   const [form, setForm] = useState(VACIO)
   /* Si se llega desde la ficha de un cliente, el paso 1 ya está resuelto. */
   const [cliente, setCliente] = useState(clienteInicial)
+  /* El vehículo elegido de los que ya tiene el cliente, o el que se está
+     cargando por primera vez. Cuál de los dos es lo dice `id`. */
+  const [vehiculo, setVehiculo] = useState(null)
   const [mecanicoId, setMecanicoId] = useState('')
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -51,9 +53,38 @@ export default function NuevaOrden({ clienteInicial = null, onCerrar, onGuardada
       setError('Identificá al cliente antes de crear la orden.')
       return
     }
+    if (!vehiculo?.marca?.trim()) {
+      setError('Elegí el vehículo o cargá uno nuevo.')
+      return
+    }
 
     setGuardando(true)
     setError('')
+
+    /* Un auto que entra por primera vez se da de alta acá y queda del cliente:
+       la próxima visita ya sale en la lista y nadie vuelve a tipear la
+       patente. Si el alta falla no se sigue: una orden sin vehículo cargado
+       dejaría al cliente con un auto fantasma en la ficha. */
+    let elegido = vehiculo
+    if (!elegido.id) {
+      const { data, error } = await supabase
+        .from('vehiculos')
+        .insert({
+          cliente_id: cliente.id,
+          marca: elegido.marca.trim(),
+          modelo: elegido.modelo?.trim() || null,
+          patente: patenteNormal(elegido.patente),
+        })
+        .select()
+        .single()
+
+      if (error) {
+        setError(errorDeVehiculo(error))
+        setGuardando(false)
+        return
+      }
+      elegido = data
+    }
 
     const { data, error } = await supabase
       .from('ordenes')
@@ -61,8 +92,12 @@ export default function NuevaOrden({ clienteInicial = null, onCerrar, onGuardada
         cliente_id: cliente.id,
         recepcionista_id: sesion.user.id,
         mecanico_id: mecanicoId || null,
-        vehiculo: form.vehiculo.trim(),
-        patente: form.patente.trim().toUpperCase() || null,
+        vehiculo_id: elegido.id,
+        /* El texto se guarda igual, además del vínculo: es cómo entró el auto
+           ese día. Si mañana se corrige la patente en la ficha, esta orden
+           tiene que seguir diciendo lo que decía el papel que se firmó. */
+        vehiculo: nombreVehiculo(elegido),
+        patente: elegido.patente,
         kilometraje: form.kilometraje === '' ? null : Number(form.kilometraje),
         falla_reportada: form.falla_reportada.trim() || null,
         notas: form.notas.trim() || null,
@@ -81,28 +116,20 @@ export default function NuevaOrden({ clienteInicial = null, onCerrar, onGuardada
     <Modal titulo="Nueva orden de trabajo" onCerrar={onCerrar}>
       <form onSubmit={guardar} className="space-y-5">
         <Paso numero={1} titulo="Cliente">
-          <BuscadorCliente cliente={cliente} onElegir={setCliente} />
+          <BuscadorCliente
+            cliente={cliente}
+            onElegir={(c) => {
+              setCliente(c)
+              /* Cambiar de cliente tiene que soltar el auto: si no, la orden
+                 saldría con el vehículo del cliente anterior. */
+              setVehiculo(null)
+            }}
+          />
         </Paso>
 
         <Paso numero={2} titulo="Vehículo">
           <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Campo etiqueta="Vehículo">
-                <input
-                  required
-                  className={estiloInput}
-                  placeholder="Ford Ranger 2019"
-                  {...campo('vehiculo')}
-                />
-              </Campo>
-              <Campo etiqueta="Patente">
-                <input
-                  className={`${estiloInput} uppercase`}
-                  placeholder="AB123CD"
-                  {...campo('patente')}
-                />
-              </Campo>
-            </div>
+            <SelectorVehiculo cliente={cliente} vehiculo={vehiculo} onElegir={setVehiculo} />
 
             <Campo etiqueta="Kilometraje">
               <input type="number" min="0" className={estiloInput} placeholder="82000" {...campo('kilometraje')} />
@@ -180,6 +207,126 @@ function Paso({ numero, titulo, children }) {
       </div>
       {children}
     </section>
+  )
+}
+
+/* Los autos que ya tiene el cliente, primero; cargar uno nuevo, después. Ese
+   orden es el que evita que el mismo Corolla entre cuatro veces con la patente
+   escrita de cuatro maneras, que es lo que pasaba cuando el vehículo era un
+   campo de texto en blanco en cada orden. */
+function SelectorVehiculo({ cliente, vehiculo, onElegir }) {
+  const { datos, cargando } = useConsulta(
+    () =>
+      cliente
+        ? supabase
+            .from('vehiculos')
+            .select('*')
+            .eq('cliente_id', cliente.id)
+            .order('creado_en', { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+    [cliente?.id]
+  )
+
+  if (!cliente) {
+    return (
+      <p className="rounded-lg border border-dashed border-acero-200 px-3 py-4 text-center text-sm text-acero-500">
+        Elegí al cliente y acá aparecen sus vehículos.
+      </p>
+    )
+  }
+
+  /* Ya está resuelto: uno de los suyos, o uno nuevo a medio cargar. */
+  if (vehiculo?.id) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-conforme-100 bg-conforme-50 px-3 py-2.5">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-conforme-700">
+            <Check size={14} aria-hidden="true" />
+            {nombreVehiculo(vehiculo)}
+          </p>
+          <p className="truncate font-mono text-xs uppercase text-conforme-700/80">
+            {vehiculo.patente || 'Sin patente'}
+          </p>
+        </div>
+        <Boton type="button" variante="fantasma" className="px-2 py-1" onClick={() => onElegir(null)}>
+          Cambiar
+        </Boton>
+      </div>
+    )
+  }
+
+  if (vehiculo) {
+    const campoNuevo = (k) => ({
+      value: vehiculo[k] ?? '',
+      onChange: (e) => onElegir({ ...vehiculo, [k]: e.target.value }),
+    })
+
+    return (
+      <div className="space-y-3 rounded-lg border border-concreto-200 bg-concreto-50 p-3">
+        <p className="text-menor font-semibold text-caucho-800">Vehículo nuevo</p>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Campo etiqueta="Marca">
+            <input autoFocus className={estiloInput} placeholder="Ford" {...campoNuevo('marca')} />
+          </Campo>
+          <Campo etiqueta="Modelo">
+            <input className={estiloInput} placeholder="Ranger 2019" {...campoNuevo('modelo')} />
+          </Campo>
+        </div>
+
+        <Campo etiqueta="Patente" ayuda="Queda guardada en el cliente: la próxima visita ya no se tipea.">
+          <input className={`${estiloInput} uppercase`} placeholder="AB123CD" {...campoNuevo('patente')} />
+        </Campo>
+
+        {datos?.length > 0 && (
+          <Boton type="button" variante="fantasma" className="px-2 py-1" onClick={() => onElegir(null)}>
+            Ver los que ya tiene
+          </Boton>
+        )}
+      </div>
+    )
+  }
+
+  const vehiculos = datos ?? []
+
+  return (
+    <div>
+      {cargando ? (
+        <p className="py-2 text-sm text-acero-500">Buscando sus vehículos…</p>
+      ) : vehiculos.length > 0 ? (
+        <ul className="mb-2 overflow-hidden rounded-lg border border-concreto-200">
+          {vehiculos.map((v) => (
+            <li key={v.id}>
+              <button
+                type="button"
+                onClick={() => onElegir(v)}
+                className="flex w-full items-center justify-between gap-3 border-b border-concreto-200 px-3 py-2 text-left last:border-b-0 hover:bg-concreto-50"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Car size={15} className="shrink-0 text-acero-400" aria-hidden="true" />
+                  {nombreVehiculo(v)}
+                </span>
+                <span className="font-mono text-xs uppercase text-acero-500">
+                  {v.patente || '—'}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mb-2 text-sm text-acero-500">
+          Es la primera vez que trae un auto. Cargalo y queda asociado a él.
+        </p>
+      )}
+
+      <Boton
+        type="button"
+        variante="secundario"
+        onClick={() => onElegir({ marca: '', modelo: '', patente: '' })}
+      >
+        <Plus size={15} /> {vehiculos.length ? 'Otro vehículo' : 'Cargar vehículo'}
+      </Boton>
+    </div>
   )
 }
 

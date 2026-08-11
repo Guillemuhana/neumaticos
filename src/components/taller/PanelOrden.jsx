@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase'
 import { fecha, numero, plata } from '../../lib/formato'
 import { estadoDe, numeroComprobante, tipoDe } from '../../lib/fiscal'
 import { avanceDe, etapaDe, puedeEditarPlan, puedeEditarRecepcion } from '../../lib/taller'
+import FotosVehiculo from './FotosVehiculo'
 import { Aviso, Boton, Campo, Cargando, Etiqueta, Modal, estiloInput } from '../UI'
 
 /* La orden completa, con lo que cada puesto necesita ver y solo lo que puede
@@ -89,6 +90,11 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
         </div>
 
         <Recepcion orden={orden} editable={puedeEditarRecepcion(orden, rol)} onGuardado={onCambio} />
+
+        {/* La saca cualquiera de los tres: recepción cuando recibe el auto y
+            el mecánico mientras trabaja. Una orden entregada ya no admite
+            fotos —lo dice RLS—, así que ahí solo se miran. */}
+        <FotosVehiculo orden={orden} editable={orden.estado !== 'entregada'} />
 
         <Plan
           orden={orden}

@@ -4,6 +4,8 @@ import { Search, Plus, Wrench } from 'lucide-react'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { CONDICIONES_IVA, condicionDe, cuitFormateado, cuitValido } from '../lib/fiscal'
+import { nombreVehiculo } from '../lib/vehiculos'
+import FichaCliente from '../components/clientes/FichaCliente'
 import { Aviso, Boton, Campo, Cargando, Encabezado, Modal, Tabla, Tarjeta, Vacio, estiloInput } from '../components/UI'
 
 const vacio = {
@@ -20,13 +22,21 @@ export default function Clientes() {
   const navigate = useNavigate()
   const [busqueda, setBusqueda] = useState('')
   const [editando, setEditando] = useState(null)
+  const [mirando, setMirando] = useState(null)
 
   /* El alta de un cliente casi nunca es un fin en sí mismo: viene alguien con
      el auto. Desde acá se sigue derecho a la orden, con el cliente ya puesto. */
   const abrirOrden = (cliente) => navigate('/taller', { state: { nueva: true, cliente } })
 
+  /* Los vehículos vienen en la misma consulta: el mostrador busca por el auto
+     tanto como por el nombre —"el de la Hilux blanca"— y traerlos aparte
+     obligaría a una consulta por fila. */
   const { datos, cargando, error, recargar } = useConsulta(
-    () => supabase.from('clientes').select('*').order('nombre'),
+    () =>
+      supabase
+        .from('clientes')
+        .select('*, vehiculos (id, marca, modelo, anio, patente)')
+        .order('nombre'),
     []
   )
 
@@ -35,7 +45,11 @@ export default function Clientes() {
     const q = busqueda.trim().toLowerCase()
     if (!q) return datos
     return datos.filter((c) =>
-      `${c.nombre} ${c.telefono ?? ''} ${c.email ?? ''} ${c.documento ?? ''} ${c.cuit ?? ''}`
+      `${c.nombre} ${c.telefono ?? ''} ${c.email ?? ''} ${c.documento ?? ''} ${c.cuit ?? ''} ${(
+        c.vehiculos ?? []
+      )
+        .map((v) => `${nombreVehiculo(v)} ${v.patente ?? ''}`)
+        .join(' ')}`
         .toLowerCase()
         .includes(q)
     )
@@ -57,7 +71,7 @@ export default function Clientes() {
         />
         <input
           className={`${estiloInput} pl-9`}
-          placeholder="Buscar cliente, teléfono o documento…"
+          placeholder="Buscar por cliente, teléfono, patente o vehículo…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
@@ -75,17 +89,33 @@ export default function Clientes() {
             detalle={busqueda ? 'Probá con otra búsqueda.' : 'Cargá tu primer cliente.'}
           />
         ) : (
-          <Tabla columnas={['Nombre', 'Teléfono', 'Email', 'CUIT / Documento', 'Frente al IVA', '']}>
+          <Tabla columnas={['Nombre', 'Teléfono', 'Vehículos', 'CUIT / Documento', 'Frente al IVA', '']}>
             {filtrados.map((c) => (
-              <tr key={c.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
+              /* La fila entera abre la ficha, igual que en Stock. Los botones
+                 de adentro cortan la propagación: tocar "Editar" no tiene que
+                 abrir además la ficha detrás del formulario. */
+              <tr
+                key={c.id}
+                onClick={() => setMirando(c)}
+                className="cursor-pointer rounded-xl bg-white shadow-sm hover:bg-concreto-50 sm:bg-transparent sm:shadow-none"
+              >
                 <td data-label="Nombre" className="px-4 py-3 font-medium">
                   {c.nombre}
                 </td>
                 <td data-label="Teléfono" className="px-4 py-3">
                   {c.telefono ?? '—'}
                 </td>
-                <td data-label="Email" className="px-4 py-3">
-                  {c.email ?? '—'}
+                {/* El primero y cuántos más: en el mostrador alcanza para
+                    reconocer al cliente, y el resto está en la ficha. */}
+                <td data-label="Vehículos" className="px-4 py-3 text-acero-500">
+                  {c.vehiculos?.length ? (
+                    <>
+                      {nombreVehiculo(c.vehiculos[0])}
+                      {c.vehiculos.length > 1 && ` +${c.vehiculos.length - 1}`}
+                    </>
+                  ) : (
+                    '—'
+                  )}
                 </td>
                 {/* El CUIT tapa al documento porque es el que se factura; el
                     documento queda de respaldo para el consumidor final. */}
@@ -96,7 +126,7 @@ export default function Clientes() {
                   {condicionDe(c.condicion_iva).texto}
                 </td>
                 <td data-label="Acciones" className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-1">
+                  <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                     <Boton
                       variante="secundario"
                       className="px-2 py-1"
@@ -114,6 +144,10 @@ export default function Clientes() {
           </Tabla>
         )}
       </Tarjeta>
+
+      {mirando && (
+        <FichaCliente cliente={mirando} onCerrar={() => setMirando(null)} onCambio={recargar} />
+      )}
 
       {editando && (
         <FormularioCliente

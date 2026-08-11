@@ -244,14 +244,29 @@ export function Vacio({ icono: Icono, titulo, detalle }) {
   )
 }
 
+/* Los diálogos se apilan: el visor de fotos se abre encima del panel de la
+   orden, que ya es un diálogo. Sin esta pila, Escape cerraba los dos de una
+   —cada uno escucha en `window`— y quien miraba una foto perdía la orden
+   entera; y al cerrar el de arriba se devolvía el scroll al fondo con el de
+   abajo todavía abierto. */
+const pilaDeModales = []
+
 export function Modal({ titulo, onCerrar, children }) {
   useEffect(() => {
-    const alTeclear = (e) => e.key === 'Escape' && onCerrar()
+    const marca = Symbol('modal')
+    pilaDeModales.push(marca)
+
+    const alTeclear = (e) => {
+      if (e.key === 'Escape' && pilaDeModales.at(-1) === marca) onCerrar()
+    }
+
     window.addEventListener('keydown', alTeclear)
     document.body.style.overflow = 'hidden'
+
     return () => {
       window.removeEventListener('keydown', alTeclear)
-      document.body.style.overflow = ''
+      pilaDeModales.splice(pilaDeModales.indexOf(marca), 1)
+      if (!pilaDeModales.length) document.body.style.overflow = ''
     }
   }, [onCerrar])
 

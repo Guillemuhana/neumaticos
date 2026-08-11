@@ -559,6 +559,33 @@ do $$ begin
   end if;
 end $$;
 
+-- ---------------------------------------------------------------- vehículos
+-- El auto como cosa propia del cliente, y no como un texto suelto adentro de
+-- cada orden. Es lo que hace posible que la ficha del cliente muestre "sus
+-- autos", que el historial de un vehículo cruce varias visitas y que la
+-- patente se tipee una vez sola y no en cada ingreso.
+create table if not exists vehiculos (
+  id         uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references clientes on delete cascade,
+  marca      text not null,
+  modelo     text,
+  anio       integer,
+  patente    text,
+  color      text,
+  notas      text,
+  creado_en  timestamptz not null default now()
+);
+
+-- La patente identifica al auto en todo el país, así que no puede repetirse:
+-- si aparece dos veces es que alguien la cargó mal o el auto cambió de dueño,
+-- y las dos cosas se resuelven mirando, no duplicando. Se compara en
+-- mayúsculas porque en el mostrador se tipea de las dos formas, y solo cuando
+-- hay patente cargada: un auto sin chapa todavía es un caso real.
+create unique index if not exists vehiculos_patente_idx
+  on vehiculos (upper(patente)) where patente is not null;
+
+create index if not exists vehiculos_cliente_idx on vehiculos (cliente_id, marca);
+
 create table if not exists ordenes (
   id           uuid primary key default gen_random_uuid(),
   cliente_id   uuid references clientes on delete set null,
@@ -593,6 +620,42 @@ alter table ordenes drop column if exists aprobada_por;
 alter table ordenes drop column if exists aprobacion_nota;
 
 alter table ordenes alter column estado set default 'pendiente';
+
+-- El vehículo de la orden. `vehiculo` y `patente` siguen siendo texto y no se
+-- borran a propósito: son la foto de cómo entró el auto ese día. Si mañana se
+-- corrige la patente en la ficha, la orden vieja tiene que seguir diciendo lo
+-- que decía el papel que firmó el cliente.
+alter table ordenes add column if not exists vehiculo_id uuid references vehiculos on delete set null;
+create index if not exists ordenes_vehiculo_idx on ordenes (vehiculo_id, creada_en desc);
+
+-- Rescata los autos que hoy viven como texto adentro de las órdenes ya
+-- cargadas. Sin esto la ficha del cliente arrancaría vacía aunque el taller
+-- lleve meses atendiéndolo, y habría que recargar todo a mano.
+do $$ begin
+  insert into vehiculos (cliente_id, marca, patente)
+  select distinct on (o.cliente_id, upper(coalesce(nullif(trim(o.patente), ''), o.vehiculo)))
+         o.cliente_id,
+         o.vehiculo,
+         nullif(upper(trim(o.patente)), '')
+    from ordenes o
+   where o.cliente_id is not null
+     and o.vehiculo_id is null
+   order by o.cliente_id,
+            upper(coalesce(nullif(trim(o.patente), ''), o.vehiculo)),
+            o.creada_en
+  on conflict do nothing;
+
+  -- Por patente cuando la hay, que es la identificación de verdad; por el
+  -- texto del vehículo cuando la orden entró sin chapa.
+  update ordenes o set vehiculo_id = v.id
+    from vehiculos v
+   where o.vehiculo_id is null
+     and v.cliente_id = o.cliente_id
+     and (
+       (nullif(trim(o.patente), '') is not null and upper(trim(o.patente)) = upper(v.patente))
+       or (nullif(trim(o.patente), '') is null and v.patente is null and v.marca = o.vehiculo)
+     );
+end $$;
 
 create index if not exists ordenes_estado_idx on ordenes (estado, creada_en desc);
 create index if not exists ordenes_mecanico_idx on ordenes (mecanico_id, estado);
@@ -851,6 +914,7 @@ alter table productos          enable row level security;
 alter table ventas             enable row level security;
 alter table venta_items        enable row level security;
 alter table ordenes            enable row level security;
+alter table vehiculos          enable row level security;
 alter table fichadas           enable row level security;
 alter table empresa            enable row level security;
 alter table comprobantes       enable row level security;
@@ -916,6 +980,16 @@ create policy venta_items_todo on venta_items for all to authenticated
   with check (exists (
     select 1 from ventas v where v.id = venta_id
       and (v.vendedor_id = auth.uid() or public.es_gerencia())));
+
+-- El auto lo carga el mostrador, igual que a su dueño: el mecánico lo lee para
+-- saber qué tiene delante, pero no le corrige la patente al cliente.
+drop policy if exists vehiculos_leer on vehiculos;
+create policy vehiculos_leer on vehiculos for select to authenticated using (true);
+
+drop policy if exists vehiculos_escribir on vehiculos;
+create policy vehiculos_escribir on vehiculos for all to authenticated
+  using (public.mi_rol() in ('gerencia', 'vendedor'))
+  with check (public.mi_rol() in ('gerencia', 'vendedor'));
 
 -- Taller: la orden la ve todo el equipo, pero cada escritorio toca lo suyo.
 -- Estas políticas deciden *quién* puede escribir la fila; el trigger
