@@ -509,6 +509,43 @@ const SECCIONES = [
     ),
   },
   {
+    id: 'chat',
+    titulo: 'Chat del equipo',
+    roles: TODOS,
+    resumen: 'Un solo canal para mostrador, taller y gerencia.',
+    contenido: (
+      <>
+        <p className="text-sm text-caucho-800">
+          Es uno solo y grupal, a propósito: en un taller de seis personas los canales por tema se
+          vacían y lo importante termina dicho de viva voz igual. Cada mensaje muestra quién lo
+          escribió, con qué puesto y a qué hora.
+        </p>
+        <Lista>
+          <Item rotulo="Foto">
+            Desde el celular abre la cámara directo. Sirve para mostrar una pieza rota sin bajar al
+            mostrador a explicarla.
+          </Item>
+          <Item rotulo="Audio">
+            Se toca una vez para grabar y otra para cortar. Es más rápido que escribir con las manos
+            sucias.
+          </Item>
+          <Item rotulo="Sin leer">
+            El número al lado de <strong>Chat</strong> en el menú es lo que llegó desde la última vez
+            que lo abriste. Lo tuyo no cuenta.
+          </Item>
+        </Lista>
+        <Nota>
+          Los mensajes llegan solos, sin recargar la pantalla.
+        </Nota>
+        <Nota tono="atencion">
+          Un mensaje <strong>no se edita</strong>: si te equivocaste, mandá otro. Solo gerencia puede
+          borrar, y es para lo que no debería haberse dicho. En una discusión sobre quién avisó qué,
+          el historial es justamente lo que hay que poder mirar.
+        </Nota>
+      </>
+    ),
+  },
+  {
     id: 'comisiones',
     titulo: 'Comisiones',
     roles: TODOS,

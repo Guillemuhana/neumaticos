@@ -11,6 +11,7 @@ import Facturacion from './pages/Facturacion'
 import Taller from './pages/Taller'
 import Personal from './pages/Personal'
 import Clientes from './pages/Clientes'
+import Chat from './pages/Chat'
 import Comisiones from './pages/Comisiones'
 import Manual from './pages/Manual'
 
@@ -129,6 +130,8 @@ export default function App() {
             </SoloRoles>
           }
         />
+        {/* El chat es del equipo entero: no hay nada que filtrar por rol. */}
+        <Route path="/chat" element={<Chat />} />
         {/* Sin `SoloRoles`: el manual lo ve todo el equipo y se filtra solo,
             mostrándole a cada uno las secciones de su puesto. */}
         <Route path="/manual" element={<Manual />} />

@@ -1171,6 +1171,55 @@ end $fn$;
 revoke all on function public.liquidar_comision(uuid) from public;
 grant execute on function public.liquidar_comision(uuid) to authenticated;
 
+-- ------------------------------------------------------------------- chat
+-- El canal del equipo. Uno solo y grupal: en un taller de seis personas los
+-- canales por tema se vacían y lo importante termina dicho de viva voz igual.
+--
+-- Un mensaje no se edita ni se corrige, se manda otro. Por eso no hay política
+-- de update: lo que se dijo, se dijo, y en una discusión sobre quién avisó qué
+-- eso es justamente lo que hay que poder mirar.
+
+create table if not exists mensajes (
+  id           uuid primary key default gen_random_uuid(),
+  autor_id     uuid not null references perfiles on delete cascade,
+  texto        text,
+  -- La ruta dentro del bucket, no la URL, por lo mismo que en las fotos del
+  -- vehículo: el enlace público se arma al vuelo y puede dejar de servir.
+  adjunto_ruta text,
+  adjunto_tipo text check (adjunto_tipo in ('foto', 'audio')),
+  creado_en    timestamptz not null default now(),
+  -- Un mensaje vacío no es un mensaje. Sin esto, tocar "Enviar" sin escribir
+  -- nada llena el canal de burbujas en blanco.
+  constraint mensajes_con_contenido check (
+    nullif(btrim(coalesce(texto, '')), '') is not null or adjunto_ruta is not null
+  ),
+  constraint mensajes_adjunto_completo check (
+    (adjunto_ruta is null and adjunto_tipo is null)
+    or (adjunto_ruta is not null and adjunto_tipo is not null)
+  )
+);
+
+create index if not exists mensajes_creado_idx on mensajes (creado_en desc);
+
+-- Hasta dónde leyó cada uno. Va en su propia tabla y no en una columna de
+-- `perfiles` porque ahí solo escribe gerencia: con el perfil, nadie podría
+-- marcar sus propios mensajes como leídos.
+create table if not exists chat_lecturas (
+  perfil_id uuid primary key references perfiles on delete cascade,
+  visto_en  timestamptz not null default now()
+);
+
+-- Realtime: sin esto el chat necesitaría preguntar cada pocos segundos si hay
+-- algo nuevo, que en el celular del taller es batería y datos gastados en
+-- decir "no". El bloque tolera que ya esté agregada o que la publicación no
+-- exista, para que el archivo se pueda volver a correr entero.
+do $rt$ begin
+  alter publication supabase_realtime add table mensajes;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;
+end $rt$;
+
 -- ---------------------------------------------------------------- personal
 
 do $$ begin
@@ -1199,6 +1248,8 @@ alter table ordenes            enable row level security;
 alter table vehiculos          enable row level security;
 alter table fichadas           enable row level security;
 alter table liquidaciones      enable row level security;
+alter table mensajes           enable row level security;
+alter table chat_lecturas      enable row level security;
 alter table empresa            enable row level security;
 alter table comprobantes       enable row level security;
 alter table comprobante_items  enable row level security;
@@ -1378,6 +1429,26 @@ create policy comprobante_items_leer on comprobante_items for select to authenti
 drop policy if exists liquidaciones_leer on liquidaciones;
 create policy liquidaciones_leer on liquidaciones for select to authenticated
   using (perfil_id = auth.uid() or public.es_gerencia());
+
+-- Chat: lo lee y lo escribe todo el equipo, cada uno a su nombre. No hay
+-- política de update a propósito —un mensaje no se corrige, se manda otro— y
+-- borrar es de gerencia, para lo que no debería haberse dicho.
+drop policy if exists mensajes_leer on mensajes;
+create policy mensajes_leer on mensajes for select to authenticated using (true);
+
+drop policy if exists mensajes_crear on mensajes;
+create policy mensajes_crear on mensajes for insert to authenticated
+  with check (autor_id = auth.uid());
+
+drop policy if exists mensajes_borrar on mensajes;
+create policy mensajes_borrar on mensajes for delete to authenticated
+  using (public.es_gerencia());
+
+-- Cada uno marca lo suyo. Nadie puede decir hasta dónde leyó otro, que sería
+-- la única forma de vaciarle el contador de no leídos a un compañero.
+drop policy if exists chat_lecturas_propias on chat_lecturas;
+create policy chat_lecturas_propias on chat_lecturas for all to authenticated
+  using (perfil_id = auth.uid()) with check (perfil_id = auth.uid());
 
 -- Fichadas: cada uno ficha lo propio y no puede editarlo después.
 drop policy if exists fichadas_leer on fichadas;

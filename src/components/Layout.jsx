@@ -7,6 +7,7 @@ import {
   Contact,
   FileText,
   HandCoins,
+  MessageSquare,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -16,6 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
+import { useNoLeidos } from '../hooks/useNoLeidos'
 
 /* Cada entrada declara qué roles la ven. La lista es solo la superficie:
    si alguien fuerza la URL, RLS le devuelve vacío igual. */
@@ -32,6 +34,9 @@ const navegacion = [
   /* Cada uno ve lo suyo; gerencia ve al equipo y es la única que liquida. */
   { a: '/comisiones', texto: 'Comisiones', icono: HandCoins, roles: ['gerencia', 'vendedor', 'mecanico'] },
   { a: '/estadisticas', texto: 'Estadísticas', icono: BarChart3, roles: ['gerencia'] },
+  /* Abajo de todo y para los tres: es el canal del equipo, no una parada
+     del circuito de trabajo. Lleva el contador de lo que no se leyó. */
+  { a: '/chat', texto: 'Chat', icono: MessageSquare, roles: ['gerencia', 'vendedor', 'mecanico'] },
 ]
 
 /* El manual va en su propio grupo, abajo de todo: no es una pantalla de
@@ -53,9 +58,10 @@ const iniciales = (nombre = '') =>
     .toUpperCase() || '—'
 
 export default function Layout() {
-  const { perfil, rol, cerrarSesion } = useAuth()
+  const { perfil, rol, sesion, cerrarSesion } = useAuth()
   const [abierto, setAbierto] = useState(false)
   const ubicacion = useLocation()
+  const noLeidos = useNoLeidos(sesion?.user?.id)
 
   const items = navegacion.filter((i) => i.roles.includes(rol))
   const itemsAyuda = ayuda.filter((i) => i.roles.includes(rol))
@@ -86,6 +92,16 @@ export default function Layout() {
           />
           <Icono size={17} aria-hidden="true" className="shrink-0" />
           {texto}
+          {/* El contador va al final de la fila y no pegado al texto: así no
+              empuja el nombre del ítem cuando cambia de una a dos cifras. */}
+          {a === '/chat' && noLeidos > 0 && (
+            <span
+              aria-label={`${noLeidos} mensajes sin leer`}
+              className="ml-auto min-w-5 rounded-full bg-perez-600 px-1.5 py-0.5 text-center text-micro font-bold text-white"
+            >
+              {noLeidos > 99 ? '99+' : noLeidos}
+            </span>
+          )}
         </>
       )}
     </NavLink>
