@@ -174,7 +174,7 @@ export default function FotosVehiculo({ orden, editable }) {
                     <button
                       type="button"
                       onClick={() => setMirando(foto)}
-                      className="block w-full overflow-hidden rounded-lg border border-concreto-200"
+                      className="block w-full overflow-hidden rounded-lg border border-concreto-200 text-left"
                     >
                       <img
                         src={urlDe(foto.ruta)}
@@ -182,6 +182,13 @@ export default function FotosVehiculo({ orden, editable }) {
                         loading="lazy"
                         className="aspect-square w-full object-cover transition-transform duration-200 hover:scale-105"
                       />
+                      {/* Cuándo se sacó, a la vista y no escondido adentro del
+                          visor: si mañana se discute un daño, lo primero que
+                          se mira es la fecha, y tener que abrir foto por foto
+                          para encontrarla es justo lo que no sirve. */}
+                      <span className="block bg-concreto-100 px-1.5 py-1 text-micro tabular-nums text-acero-500">
+                        {fecha(foto.creada_en)}
+                      </span>
                     </button>
                   </li>
                 ))}

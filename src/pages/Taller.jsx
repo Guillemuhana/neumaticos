@@ -10,6 +10,8 @@ import PanelOrden from '../components/taller/PanelOrden'
 import NuevaOrden from '../components/taller/NuevaOrden'
 import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Tarjeta, Vacio } from '../components/UI'
 
+const urlDeFoto = (ruta) => supabase.storage.from('vehiculos').getPublicUrl(ruta).data.publicUrl
+
 /* El tablero sigue el recorrido real de la orden, de izquierda a derecha:
    entra por el mostrador, la toma el taller, vuelve al mostrador para
    entregarla. Todo el equipo ve las tres columnas —el vendedor necesita saber
@@ -45,6 +47,26 @@ export default function Taller() {
     const fallo = ordenes.error || equipo.error
     if (fallo) return { error: fallo }
 
+    /* Una foto por orden, para reconocer el auto de un vistazo en el tablero.
+       Se piden solo las de las órdenes que se van a mostrar —y no la tabla
+       entera— porque el historial de fotos crece para siempre y el tablero
+       no. Se ordena por momento para que gane la del ingreso, que es la que
+       muestra el auto completo; las del trabajo suelen ser un primer plano de
+       una pieza, que no sirve para identificarlo. */
+    const fotos = await supabase
+      .from('orden_fotos')
+      .select('orden_id, ruta, momento')
+      .in('orden_id', ordenes.data.map((o) => o.id))
+      .order('momento')
+      .order('creada_en')
+
+    if (fotos.error) return { error: fotos.error }
+
+    const portada = new Map()
+    for (const f of fotos.data) {
+      if (!portada.has(f.orden_id)) portada.set(f.orden_id, f.ruta)
+    }
+
     const nombre = new Map(equipo.data.map((p) => [p.id, p.nombre]))
     const quien = (id) => (id ? { nombre: nombre.get(id) ?? 'Usuario dado de baja' } : null)
 
@@ -53,6 +75,7 @@ export default function Taller() {
         ...o,
         mecanico: quien(o.mecanico_id),
         recepcionista: quien(o.recepcionista_id),
+        portada: portada.get(o.id) ?? null,
       })),
     }
   }, [])
@@ -192,14 +215,27 @@ function TarjetaOrden({ orden, destacar, mia = false, onAbrir }) {
         }
       }}
     >
-      <p className="font-semibold text-caucho-950">{orden.vehiculo}</p>
-      {orden.patente && (
-        <p className="font-mono text-xs uppercase text-acero-500">{orden.patente}</p>
-      )}
-
-      <p className="mt-1.5 truncate text-sm text-acero-500">
-        {orden.clientes?.nombre ?? 'Sin cliente'}
-      </p>
+      {/* La foto del ingreso al lado del nombre: en un tablero de doce
+          tarjetas, "Ford Ranger" se repite y el auto no. */}
+      <div className="flex items-start gap-2.5">
+        {orden.portada && (
+          <img
+            src={urlDeFoto(orden.portada)}
+            alt=""
+            loading="lazy"
+            className="h-12 w-12 shrink-0 rounded-md object-cover"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold text-caucho-950">{orden.vehiculo}</p>
+          {orden.patente && (
+            <p className="font-mono text-xs uppercase text-acero-500">{orden.patente}</p>
+          )}
+          <p className="mt-1 truncate text-sm text-acero-500">
+            {orden.clientes?.nombre ?? 'Sin cliente'}
+          </p>
+        </div>
+      </div>
 
       {orden.falla_reportada && (
         <p className="mt-1.5 line-clamp-2 text-xs text-acero-500">{orden.falla_reportada}</p>

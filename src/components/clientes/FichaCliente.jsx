@@ -97,6 +97,12 @@ export default function FichaCliente({ cliente, onCerrar, onCambio }) {
                       loading="lazy"
                       className="aspect-square w-full object-cover transition-transform duration-200 hover:scale-105"
                     />
+                    {/* Acá el vehículo importa tanto como la fecha: la ficha
+                        mezcla los ingresos de todos sus autos. */}
+                    <span className="block bg-concreto-100 px-1.5 py-1 text-micro text-acero-500">
+                      <span className="block truncate">{f.ordenes?.vehiculo}</span>
+                      <span className="tabular-nums">{fecha(f.creada_en)}</span>
+                    </span>
                   </a>
                 </li>
               ))}
