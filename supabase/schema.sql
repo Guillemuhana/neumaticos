@@ -631,7 +631,9 @@ create index if not exists ordenes_vehiculo_idx on ordenes (vehiculo_id, creada_
 -- Rescata los autos que hoy viven como texto adentro de las órdenes ya
 -- cargadas. Sin esto la ficha del cliente arrancaría vacía aunque el taller
 -- lleve meses atendiéndolo, y habría que recargar todo a mano.
-do $$ begin
+do $$
+declare v_trigger boolean;
+begin
   insert into vehiculos (cliente_id, marca, patente)
   select distinct on (o.cliente_id, upper(coalesce(nullif(trim(o.patente), ''), o.vehiculo)))
          o.cliente_id,
@@ -645,6 +647,24 @@ do $$ begin
             o.creada_en
   on conflict do nothing;
 
+  /* `validar_avance_orden` corta toda escritura sobre una orden si no hay un
+     perfil detrás, y en el SQL Editor no hay sesión: `auth.uid()` es NULL. Es
+     el comportamiento correcto para el navegador —un usuario sin perfil no
+     debería mover nada— pero convierte cualquier migración de datos en un
+     error. Se suelta para el relleno y se vuelve a atar enseguida.
+
+     El `if` es por la base nueva, donde el trigger todavía no existe: este
+     bloque corre antes de crearlo, y ahí tampoco hay órdenes que migrar.
+
+     Si algo falla en el medio, la transacción del editor revierte también el
+     `disable`: el trigger no puede quedarse suelto. */
+  select exists (
+    select 1 from pg_trigger
+     where tgname = 'trg_avance_orden' and tgrelid = 'public.ordenes'::regclass
+  ) into v_trigger;
+
+  if v_trigger then alter table ordenes disable trigger trg_avance_orden; end if;
+
   -- Por patente cuando la hay, que es la identificación de verdad; por el
   -- texto del vehículo cuando la orden entró sin chapa.
   update ordenes o set vehiculo_id = v.id
@@ -655,6 +675,8 @@ do $$ begin
        (nullif(trim(o.patente), '') is not null and upper(trim(o.patente)) = upper(v.patente))
        or (nullif(trim(o.patente), '') is null and v.patente is null and v.marca = o.vehiculo)
      );
+
+  if v_trigger then alter table ordenes enable trigger trg_avance_orden; end if;
 end $$;
 
 create index if not exists ordenes_estado_idx on ordenes (estado, creada_en desc);
