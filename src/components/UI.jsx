@@ -161,6 +161,47 @@ export function Metrica({ icono: Icono, titulo, valor, pie, tono = 'neutro', cla
   )
 }
 
+/* Grupo de botones pegados para elegir una opción de pocas: filtros de fecha,
+   tipo de ítem, alcance de una lista. Es un `radiogroup` y no una fila de
+   botones sueltos porque eso es lo que es —una opción entre varias— y es lo
+   que hace que las flechas del teclado se muevan entre ellas.
+
+   Las opciones se declaran como `{ valor, texto }`, o como texto suelto
+   cuando el valor y la etiqueta coinciden. */
+export function Segmentado({ opciones, valor, onCambio, etiqueta }) {
+  const items = opciones.map((o) => (typeof o === 'object' ? o : { valor: o, texto: o }))
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={etiqueta}
+      className="inline-flex w-fit overflow-hidden rounded-lg border border-acero-200 bg-white"
+    >
+      {items.map((o, i) => {
+        const activo = o.valor === valor
+        return (
+          <button
+            key={String(o.valor)}
+            type="button"
+            role="radio"
+            aria-checked={activo}
+            onClick={() => onCambio(o.valor)}
+            className={`px-3.5 py-1.5 text-menor font-semibold transition-colors duration-150 ${
+              i > 0 ? 'border-l border-acero-200' : ''
+            } ${
+              activo
+                ? 'bg-perez-600 text-white'
+                : 'text-caucho-800 hover:bg-concreto-100'
+            }`}
+          >
+            {o.texto}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /* Los tonos van por significado, no por color: 'estado' decide el color. */
 export function Etiqueta({ tono = 'neutro', children }) {
   const tonos = {

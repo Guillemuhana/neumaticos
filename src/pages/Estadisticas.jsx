@@ -10,14 +10,24 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Boxes, ClipboardList, Download, Receipt, Share2, Wallet, Wrench } from 'lucide-react'
+import {
+  Boxes,
+  ClipboardList,
+  Contact,
+  Download,
+  HandCoins,
+  Receipt,
+  Share2,
+  Wallet,
+  Wrench,
+} from 'lucide-react'
 import { eachDayOfInterval, format, startOfDay, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { numero, plata } from '../lib/formato'
 import { ETAPAS, etapaDe } from '../lib/taller'
-import { Aviso, Boton, Cargando, Encabezado, Metrica } from '../components/UI'
+import { Aviso, Boton, Cargando, Encabezado, Metrica, Segmentado, Tabla, Tarjeta } from '../components/UI'
 import {
   GRIS_EJE,
   GRIS_FONDO,
@@ -29,9 +39,10 @@ import {
 } from '../components/Grafico'
 
 const periodos = [
-  { dias: 7, texto: '7 días' },
-  { dias: 30, texto: '30 días' },
-  { dias: 90, texto: '90 días' },
+  { valor: 1, texto: 'Hoy' },
+  { valor: 7, texto: '7 días' },
+  { valor: 30, texto: '30 días' },
+  { valor: 365, texto: 'Año' },
 ]
 
 export default function Estadisticas() {
@@ -59,7 +70,8 @@ export default function Estadisticas() {
         .eq('ventas.estado', 'confirmada')
         .gte('ventas.creada_en', desde)
 
-    const [ventas, ordenes, equipo, productos, ventasDetalle] = await Promise.all([
+    const [ventas, ordenes, equipo, productos, ventasDetalle, manoDeObra, clientes] =
+      await Promise.all([
       supabase
         .from('ventas')
         .select('id, total, creada_en, estado, vendedor_id, perfiles(nombre)')
@@ -72,17 +84,32 @@ export default function Estadisticas() {
            la vista `equipo`. */
         .select('id, vehiculo, patente, estado, total, notas, creada_en, mecanico_id')
         .gte('creada_en', desde),
-      supabase.from('equipo').select('id, nombre'),
+      /* `perfiles` y no `equipo`: hace falta el porcentaje de comisión, que la
+         vista no expone. Esta pantalla es solo de gerencia, y RLS le devuelve
+         el equipo entero; a cualquier otro le devolvería una fila. */
+      supabase.from('perfiles').select('id, nombre, rol, comision_pct'),
       conCategoria(
         () => supabase.from('productos').select('stock, costo, categoria').eq('activo', true),
         () => supabase.from('productos').select('stock, costo').eq('activo', true)
       ),
       conCategoria(items('marca, medida, categoria'), items('marca, medida')),
+      /* La comisión del mecánico sale de la mano de obra, no del total de la
+         orden: los repuestos no los vende, los coloca. Mismo criterio que
+         `comisiones_pendientes()` en la base, para que los dos números
+         coincidan cuando alguien los compare. */
+      supabase
+        .from('orden_items')
+        .select('cantidad, precio_unitario, ordenes!inner(mecanico_id, estado, cerrada_en)')
+        .eq('tipo', 'servicio')
+        .eq('ordenes.estado', 'entregada')
+        .gte('ordenes.cerrada_en', desde),
+      supabase.from('clientes').select('id', { count: 'exact', head: true }),
     ])
 
     /* Devolver el error entero, no un booleano: el hook lee `.message`, y un
        `true` suelto dejaba el cartel vacío — que es la pantalla en blanco. */
-    const fallo = [ventas, ordenes, equipo, productos, ventasDetalle].find((r) => r.error)?.error
+    const fallo = [ventas, ordenes, equipo, productos, ventasDetalle, manoDeObra, clientes]
+      .find((r) => r.error)?.error
     if (fallo) return { error: fallo }
 
     const nombre = new Map(equipo.data.map((p) => [p.id, p.nombre]))
@@ -94,8 +121,11 @@ export default function Estadisticas() {
           ...o,
           mecanico: o.mecanico_id ? { nombre: nombre.get(o.mecanico_id) } : null,
         })),
+        equipo: equipo.data,
         productos: productos.data,
         ventasDetalle: ventasDetalle.data,
+        manoDeObra: manoDeObra.data,
+        totalClientes: clientes.count ?? 0,
       },
     }
   }, [dias])
@@ -104,7 +134,50 @@ export default function Estadisticas() {
   if (error) return <Aviso>{error}</Aviso>
   if (!datos) return <Aviso>Ocurrió un error inesperado al cargar las estadísticas.</Aviso>
 
-  const { ventas, ordenes, productos, ventasDetalle } = datos
+  const { ventas, ordenes, equipo, productos, ventasDetalle, manoDeObra, totalClientes } =
+    datos
+
+  /* Los rankings del período. La comisión se calcula con el porcentaje que
+     rige hoy: es una proyección de lo que se va a pagar, no un recibo. Lo ya
+     liquidado, con su porcentaje congelado, vive en Comisiones. */
+  const pctDe = (id) => Number(equipo.find((p) => p.id === id)?.comision_pct ?? 0)
+  const nombreDe = (id) => equipo.find((p) => p.id === id)?.nombre ?? 'Sin asignar'
+
+  const rankingVendedores = Object.values(
+    ventas.reduce((acc, v) => {
+      const fila = (acc[v.vendedor_id] ??= { id: v.vendedor_id, base: 0, cantidad: 0 })
+      fila.base += Number(v.total)
+      fila.cantidad += 1
+      return acc
+    }, {})
+  )
+    .map((f) => ({ ...f, nombre: nombreDe(f.id), comision: (f.base * pctDe(f.id)) / 100 }))
+    .sort((a, b) => b.base - a.base)
+
+  const rankingMecanicos = Object.values(
+    manoDeObra.reduce((acc, i) => {
+      const id = i.ordenes?.mecanico_id
+      if (!id) return acc
+      const fila = (acc[id] ??= { id, base: 0, ordenes: new Set() })
+      fila.base += Number(i.cantidad) * Number(i.precio_unitario)
+      return acc
+    }, {})
+  )
+    .map((f) => ({
+      ...f,
+      nombre: nombreDe(f.id),
+      /* Los trabajos se cuentan sobre las órdenes entregadas del período y no
+         sobre los renglones: una orden con tres servicios es un trabajo. */
+      cantidad: ordenes.filter(
+        (o) => o.mecanico_id === f.id && o.estado === 'entregada'
+      ).length,
+      comision: (f.base * pctDe(f.id)) / 100,
+    }))
+    .sort((a, b) => b.base - a.base)
+
+  const comisionesAPagar =
+    rankingVendedores.reduce((a, f) => a + f.comision, 0) +
+    rankingMecanicos.reduce((a, f) => a + f.comision, 0)
 
   const facturado = ventas.reduce((a, v) => a + Number(v.total), 0)
   const ticket = ventas.length ? facturado / ventas.length : 0
@@ -300,21 +373,13 @@ export default function Estadisticas() {
       </Encabezado>
 
       {/* Un solo filtro arriba: alcanza a todos los gráficos de la vista. */}
-      <div className="mb-6 flex w-fit gap-1 rounded-full border border-concreto-200 bg-white p-1 shadow-sm">
-        {periodos.map((p) => (
-          <button
-            key={p.dias}
-            onClick={() => setDias(p.dias)}
-            aria-pressed={dias === p.dias}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
-              dias === p.dias
-                ? 'bg-perez-600 text-white shadow-sm shadow-perez-900/20'
-                : 'text-acero-500 hover:bg-concreto-100 hover:text-caucho-800'
-            }`}
-          >
-            {p.texto}
-          </button>
-        ))}
+      <div className="mb-6">
+        <Segmentado
+          etiqueta="Período"
+          opciones={periodos}
+          valor={dias}
+          onCambio={setDias}
+        />
       </div>
 
       <div className="cascada grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -331,6 +396,33 @@ export default function Estadisticas() {
         />
         <Metrica icono={ClipboardList} titulo="Trabajos hoy" valor={numero(ordenesHoy.length)} pie="Órdenes abiertas en el día" />
         <Metrica icono={Boxes} titulo="Valor de inventario" valor={plata(inventario)} pie="Stock actual a costo" />
+        <Metrica
+          icono={HandCoins}
+          titulo="Comisiones a pagar"
+          valor={plata(comisionesAPagar)}
+          pie="Vendedores y mecánicos del período"
+        />
+        <Metrica
+          icono={Contact}
+          titulo="Clientes registrados"
+          valor={numero(totalClientes)}
+          pie="En toda la base, no solo del período"
+        />
+      </div>
+
+      <div className="mt-6 grid gap-4 xl:grid-cols-2">
+        <Ranking
+          titulo="Vendedores"
+          filas={rankingVendedores}
+          rotuloBase="Vendido"
+          rotuloCantidad="Ventas"
+        />
+        <Ranking
+          titulo="Mecánicos"
+          filas={rankingMecanicos}
+          rotuloBase="Mano de obra"
+          rotuloCantidad="Trabajos"
+        />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-2">
@@ -454,5 +546,52 @@ export default function Estadisticas() {
         />
       </div>
     </>
+  )
+}
+
+/* Quién vendió y quién trabajó, con lo que le toca. Es la misma tabla para los
+   dos puestos porque es la misma pregunta: cuánto movió cada uno y cuánto se
+   lleva. Solo cambian los rótulos. */
+function Ranking({ titulo, filas, rotuloBase, rotuloCantidad }) {
+  return (
+    <section>
+      <h2 className="display mb-3 text-base font-bold">{titulo}</h2>
+      <Tarjeta>
+        {!filas.length ? (
+          <p className="px-4 py-6 text-sm text-acero-500">
+            Sin movimiento en el período elegido.
+          </p>
+        ) : (
+          <Tabla
+            columnas={[
+              'Nombre',
+              { texto: rotuloCantidad, cifra: true },
+              { texto: rotuloBase, cifra: true },
+              { texto: 'Comisión', cifra: true },
+            ]}
+          >
+            {filas.map((f) => (
+              <tr
+                key={f.id}
+                className="rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none"
+              >
+                <td data-label="Nombre" className="px-4 py-2.5 font-medium">
+                  {f.nombre}
+                </td>
+                <td data-label={rotuloCantidad} className="cifra px-4 py-2.5 text-acero-500">
+                  {numero(f.cantidad)}
+                </td>
+                <td data-label={rotuloBase} className="cifra px-4 py-2.5">
+                  {plata(f.base)}
+                </td>
+                <td data-label="Comisión" className="cifra px-4 py-2.5 font-semibold">
+                  {plata(f.comision)}
+                </td>
+              </tr>
+            ))}
+          </Tabla>
+        )}
+      </Tarjeta>
+    </section>
   )
 }

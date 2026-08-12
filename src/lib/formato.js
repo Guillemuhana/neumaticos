@@ -36,5 +36,9 @@ export const fecha = (d) => (d ? format(aFecha(d), "d 'de' MMM, HH:mm", { locale
 
 export const fechaCorta = (d) => (d ? format(aFecha(d), 'dd/MM/yy', { locale: es }) : '—')
 
+/* Para listas de un solo día —las ventas de hoy, las fichadas— donde repetir
+   la fecha en cada fila no agrega nada y estorba a la lectura de la columna. */
+export const hora = (d) => (d ? format(aFecha(d), 'HH:mm', { locale: es }) : '—')
+
 export const desde = (d) =>
   d ? formatDistanceToNow(aFecha(d), { locale: es, addSuffix: true }) : '—'

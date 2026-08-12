@@ -19,7 +19,10 @@ export function AuthProvider({ children }) {
     try {
       const { data, error } = await supabase
         .from('perfiles')
-        .select('id, nombre, rol, activo')
+        /* `imagen_url` la usa la barra lateral y `comision_pct`, el panel de
+           cada uno: son datos del propio perfil, que es justo lo que RLS
+           siempre devuelve, así que no cuesta traerlos con la sesión. */
+        .select('id, nombre, rol, activo, imagen_url, comision_pct')
         .eq('id', userId)
         .maybeSingle()
       if (error) throw error
