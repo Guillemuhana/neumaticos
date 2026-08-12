@@ -115,14 +115,47 @@ src/
   index.css             tokens de marca (Tailwind v4, @theme)
   lib/supabase.js       cliente de Supabase
   context/AuthProvider  sesión, iniciarSesion, cerrarSesion
-  components/UI.jsx     Boton, Campo, Aviso, Cargando, estiloInput
-  components/taller/    RecibirVehiculo (recepción), PanelOrden (plan y avance)
+  hooks/useConsulta.js  envuelve una consulta: carga, error y recarga
+  hooks/useNoLeidos.js  contador de mensajes sin leer del chat
+  components/UI.jsx     Boton, Campo, Tabla, Etiqueta, Modal, Segmentado…
+  components/taller/    NuevaOrden, PanelOrden, FotosVehiculo
+  components/clientes/  FichaCliente (vehículos, fotos e historial)
   components/facturacion/  PanelComprobante (carga del CAE), ComprobanteImpreso
-  lib/taller.js         etapas del circuito y quién puede avanzar cada una
+  lib/taller.js         etapas del circuito, control de calidad y permisos
+  lib/vehiculos.js      cómo se nombra y se normaliza un vehículo
+  lib/imagen.js         achica las fotos antes de subirlas
   lib/fiscal.js         condiciones de IVA, tipos de comprobante, validación de CUIT
   pages/                Login, Inicio, Stock, Ventas, Clientes, Taller,
-                        Facturacion, Personal, Estadisticas
+                        Facturacion, Caja, Comisiones, Chat, Personal,
+                        Estadisticas, Manual
 ```
+
+## Los otros módulos
+
+**Vehículos y fotos.** El auto es del cliente, no un texto dentro de la orden:
+eso es lo que permite cruzar varias visitas del mismo vehículo. Las fotos
+cuelgan de la orden porque lo que se documenta es *ese* ingreso, y la ficha del
+cliente las muestra todas juntas. El momento —cómo entró, durante el trabajo,
+cómo se entregó— lo deduce el estado de la orden.
+
+**Comisiones.** El vendedor cobra sobre lo vendido; el mecánico, sobre la mano
+de obra (los repuestos no los vende, los coloca). *Liquidar* cierra un tramo de
+tiempo en vez de marcar una casilla: lo que se debe es siempre lo generado
+después de la última liquidación, y cada una guarda el porcentaje de ese día,
+así cambiar el % no reescribe lo ya pagado.
+
+**Caja.** Se abre con lo que hay en el cajón y se cierra contando. Solo mira el
+efectivo —una transferencia no está en el cajón—, y para eso la venta guarda
+`medio_pago`, que se pregunta al confirmar. Un índice único parcial garantiza
+una sola caja abierta en todo el local.
+
+**Chat.** Un canal grupal para los tres puestos, con foto y audio. Los mensajes
+llegan por realtime; un mensaje no se edita, se manda otro.
+
+**Garantías y hallazgos.** El hallazgo es lo que aparece de más con el auto en
+el elevador: lo informa el taller y lo responde el mostrador, que es quien
+habla con el cliente. La garantía es el trabajo que volvió: cuelga de la orden
+entregada y le aparece al mecánico que lo hizo.
 
 ## Pendiente
 
@@ -134,3 +167,15 @@ src/
 - Exportar la orden y el presupuesto a PDF
 - Calendario de turnos por técnico
 - El logo de la empresa en la papelería (los datos ya son configurables)
+
+## Antes de usarlo con datos reales
+
+Dos cosas que hoy están bien para mostrar el sistema y no para trabajarlo:
+
+- **Los buckets de Storage son públicos.** Las fotos de los vehículos y los
+  adjuntos del chat se abren con solo tener el enlace, sin sesión. Pasarlos a
+  privado es cambiar `public` a `false` en `supabase/storage.sql` y reemplazar
+  `getPublicUrl` por `createSignedUrl` en `FotosVehiculo`, `FichaCliente` y
+  `Chat`.
+- **La contraseña del admin es de demostración.** Cambiala desde Supabase →
+  Authentication antes de que entre gente del taller.

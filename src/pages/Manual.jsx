@@ -295,14 +295,22 @@ const SECCIONES = [
               Sacale fotos al auto mientras trabajás: quedan guardadas en la orden.
             </p>
           </Paso>
-          <Paso numero={4} titulo="Mandala a control de calidad">
+          <Paso numero={4} titulo="Si aparece algo que el cliente no pidió">
+            <p>
+              Cargalo en <strong>Hallazgos para aprobar</strong> y tocá{' '}
+              <strong>Informar hallazgo</strong>. No lo hagas y avises después —así aparecen los
+              adicionales que nadie aceptó— ni frenes el trabajo esperando que alguien pase por el
+              taller. El mostrador llama al cliente y marca la respuesta acá mismo.
+            </p>
+          </Paso>
+          <Paso numero={5} titulo="Mandala a control de calidad">
             <p>
               Cuando el vehículo está listo, <strong>Mandar a control</strong>. Ahí se revisan cuatro
               puntos —nivel de aceite, presión de neumáticos, frenos y luces— y recién con los cuatro
               tildados se puede dar el trabajo por listo. No se puede saltear: el sistema lo rechaza.
             </p>
           </Paso>
-          <Paso numero={5} titulo="Dala por lista">
+          <Paso numero={6} titulo="Dala por lista">
             <p>
               Con <strong>Dar por listo</strong> la orden vuelve al mostrador para que entreguen y
               cobren. Si al revisar aparece algo, devolvela a «En proceso»: el control se destilda
@@ -622,6 +630,93 @@ const SECCIONES = [
         <Nota>
           Las órdenes de taller no necesitan este paso: al entregar ya generan su venta y su
           comprobante.
+        </Nota>
+      </>
+    ),
+  },
+  {
+    id: 'caja',
+    titulo: 'Caja',
+    roles: MOSTRADOR,
+    resumen: 'Abrir el turno y arquear al cerrar.',
+    contenido: (
+      <>
+        <p className="text-sm text-caucho-800">
+          Se abre con lo que hay en el cajón y se cierra contando. Lo que importa no es el total
+          sino <strong>la diferencia</strong> entre lo que la caja dice que debería haber y lo que
+          efectivamente había.
+        </p>
+        <Pasos>
+          <Paso numero={1} titulo="Abrí con el monto inicial">
+            <p>
+              Contá lo que hay en el cajón al empezar y cargalo. Hay{' '}
+              <strong>una sola caja abierta en todo el local</strong>: si otro la abrió desde la
+              otra computadora, te va a avisar.
+            </p>
+          </Paso>
+          <Paso numero={2} titulo="Vendé normal">
+            <p>
+              Cada venta que confirmás pregunta el medio de pago. Solo lo cobrado en{' '}
+              <strong>efectivo</strong> suma a la caja: una transferencia no está en el cajón.
+            </p>
+          </Paso>
+          <Paso numero={3} titulo="Cerrá contando">
+            <p>
+              Cargá lo que contaste y el cartel te dice si sobra o falta, mientras tipeás. Si hay
+              diferencia, escribí por qué en las notas: un flete pagado con plata de la caja
+              explica el faltante y evita la conversación de mañana.
+            </p>
+          </Paso>
+        </Pasos>
+        <Nota tono="atencion">
+          Si una venta se cobró en efectivo pero se cargó como transferencia, la caja va a marcar un
+          sobrante. Se corrige en la venta, no en la caja.
+        </Nota>
+      </>
+    ),
+  },
+  {
+    id: 'garantias',
+    titulo: 'Garantías',
+    roles: TODOS,
+    resumen: 'Cuando el cliente vuelve porque algo falló.',
+    contenido: (
+      <>
+        <p className="text-sm text-caucho-800">
+          Se registran desde la <strong>orden ya entregada</strong>, en Taller: abrila desde el
+          historial y cargá el reclamo. Cuelgan del trabajo y no del cliente, así salen solos el
+          vehículo, el mecánico que lo hizo y las fotos de cómo entró y cómo salió.
+        </p>
+        <Lista>
+          <Item rotulo="Las carga el mostrador">
+            Que es quien recibe el reclamo del cliente.
+          </Item>
+          <Item rotulo="Le aparecen al mecánico">
+            En su panel, filtradas por el mecánico de la orden. Lo que importa es de quién era el
+            trabajo que falló, no quién anotó el reclamo.
+          </Item>
+          <Item rotulo="Cerrarlas pide explicación">
+            Sea <strong>Resuelta</strong> o <strong>No corresponde</strong>, hay que escribir qué se
+            hizo. Es lo que hace falta si el cliente vuelve una tercera vez.
+          </Item>
+        </Lista>
+      </>
+    ),
+  },
+  {
+    id: 'recordatorios',
+    titulo: 'Recordatorios',
+    roles: MOSTRADOR,
+    resumen: 'Tu agenda, en el panel de inicio.',
+    contenido: (
+      <>
+        <p className="text-sm text-caucho-800">
+          Llamar a alguien, avisar que llegó un repuesto, recordar un service. Se cargan y se miran
+          en tu panel de inicio, que es donde vas a estar.
+        </p>
+        <Nota>
+          Son <strong>tuyos</strong>: nadie más los ve, ni siquiera gerencia. La lista de pendientes
+          de otro no le sirve a nadie.
         </Nota>
       </>
     ),
