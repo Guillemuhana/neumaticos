@@ -141,9 +141,10 @@ function Item({ rotulo, children }) {
 /* La misma tabla de etapas que usa el tablero, escrita para leer. */
 function Etapas() {
   const etapas = [
-    ['Pendiente', 'atencion', 'Mostrador', 'La orden está cargada y esperando que el taller la tome.'],
+    ['Orden creada', 'atencion', 'Mostrador', 'La orden está cargada y esperando que el taller la tome.'],
     ['En proceso', 'marca', 'Taller', 'Un mecánico la tomó y está trabajando.'],
-    ['Terminada', 'conforme', 'Taller', 'El trabajo está listo. Vuelve al mostrador.'],
+    ['Control de calidad', 'atencion', 'Taller', 'El trabajo está hecho y se está revisando antes de avisar.'],
+    ['Listo para entrega', 'conforme', 'Taller', 'Pasó el control. Vuelve al mostrador para entregar y cobrar.'],
     ['Entregada', 'neutro', 'Mostrador', 'Se entregó el vehículo y se cerró la orden.'],
   ]
 
@@ -268,7 +269,7 @@ const SECCIONES = [
     contenido: (
       <>
         <p className="text-sm text-caucho-800">
-          En <strong>Taller</strong> vas a ver tres columnas. La que te toca está marcada con{' '}
+          En <strong>Taller</strong> vas a ver cuatro columnas. La que te toca está marcada con{' '}
           <span className="font-semibold text-perez-700">Te toca</span>. Tocá una tarjeta para abrir
           la orden.
         </p>
@@ -286,10 +287,26 @@ const SECCIONES = [
               cambiarlo.
             </p>
           </Paso>
-          <Paso numero={3} titulo="Marcala como terminada">
+          <Paso numero={3} titulo="Cargá hallazgos y diagnóstico">
             <p>
-              Cuando el vehículo está listo, <strong>Marcar como terminada</strong>. Ahí la orden
-              vuelve al mostrador para que entreguen y cobren.
+              <strong>Hallazgos</strong> es lo que encontraste; <strong>diagnóstico</strong>, qué lo
+              explica y qué hay que hacer. No son lo mismo, y tenerlos separados es lo que después
+              sostiene un adicional cuando el cliente pregunta por qué salió más de lo hablado.
+              Sacale fotos al auto mientras trabajás: quedan guardadas en la orden.
+            </p>
+          </Paso>
+          <Paso numero={4} titulo="Mandala a control de calidad">
+            <p>
+              Cuando el vehículo está listo, <strong>Mandar a control</strong>. Ahí se revisan cuatro
+              puntos —nivel de aceite, presión de neumáticos, frenos y luces— y recién con los cuatro
+              tildados se puede dar el trabajo por listo. No se puede saltear: el sistema lo rechaza.
+            </p>
+          </Paso>
+          <Paso numero={5} titulo="Dala por lista">
+            <p>
+              Con <strong>Dar por listo</strong> la orden vuelve al mostrador para que entreguen y
+              cobren. Si al revisar aparece algo, devolvela a «En proceso»: el control se destilda
+              solo, porque lo que se revisó ya no describe cómo quedó el auto.
             </p>
           </Paso>
         </Pasos>
@@ -299,7 +316,7 @@ const SECCIONES = [
           dejarla tomada sin avanzar.
         </Nota>
         <Nota tono="atencion">
-          Desde el taller se cambia el estado, el mecánico y las notas. Los precios y los datos del
+          Desde el taller se cambia el estado, el diagnóstico y el control de calidad. Los precios y los datos del
           cliente no se tocan, y el sistema los rechaza aunque se intente. No es desconfianza: es
           para que nadie cargue con un error que no cometió.
         </Nota>

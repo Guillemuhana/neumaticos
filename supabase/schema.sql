@@ -559,6 +559,14 @@ do $$ begin
   end if;
 end $$;
 
+-- El control de calidad es una etapa y no una casilla al costado: el trabajo
+-- se revisa antes de avisarle al cliente que puede venir a buscar el auto.
+-- `after 'en_proceso'` ordena el enum como el recorrido real.
+--
+-- Va después del bloque de arriba a propósito: ese rehace el tipo desde cero
+-- cuando encuentra el circuito viejo, y se llevaría puesta esta etapa.
+alter type estado_orden add value if not exists 'control_calidad' after 'en_proceso';
+
 -- ---------------------------------------------------------------- vehículos
 -- El auto como cosa propia del cliente, y no como un texto suelto adentro de
 -- cada orden. Es lo que hace posible que la ficha del cliente muestre "sus
@@ -620,6 +628,25 @@ alter table ordenes drop column if exists aprobada_por;
 alter table ordenes drop column if exists aprobacion_nota;
 
 alter table ordenes alter column estado set default 'pendiente';
+
+-- Lo que el taller escribe sobre el auto. `falla_reportada` es lo que dijo el
+-- cliente; estos dos son lo que encontró el mecánico, que casi nunca es lo
+-- mismo, y separarlos es lo que después permite discutir un adicional.
+alter table ordenes add column if not exists hallazgos   text;
+alter table ordenes add column if not exists diagnostico text;
+
+-- El control de calidad, punto por punto. Son cuatro columnas y no un jsonb
+-- porque el trigger las exige antes de dejar pasar la orden: una revisión a
+-- medias no puede quedar como hecha, y para eso la base tiene que poder
+-- mirarlas de a una.
+alter table ordenes add column if not exists control_aceite     boolean not null default false;
+alter table ordenes add column if not exists control_neumaticos boolean not null default false;
+alter table ordenes add column if not exists control_frenos     boolean not null default false;
+alter table ordenes add column if not exists control_luces      boolean not null default false;
+
+-- Lo que se define recién al entregar.
+alter table ordenes add column if not exists medio_pago      text;
+alter table ordenes add column if not exists proximo_service date;
 
 -- El vehículo de la orden. `vehiculo` y `patente` siguen siendo texto y no se
 -- borran a propósito: son la foto de cómo entró el auto ese día. Si mañana se
@@ -790,8 +817,10 @@ begin
     or new.falla_reportada is distinct from old.falla_reportada
     or new.plan_notas      is distinct from old.plan_notas
     or new.venta_id        is distinct from old.venta_id
+    or new.medio_pago      is distinct from old.medio_pago
+    or new.proximo_service is distinct from old.proximo_service
   ) then
-    raise exception 'El taller solo cambia el estado, el mecánico asignado y las notas.';
+    raise exception 'El taller solo cambia el estado, el diagnóstico y el control de calidad.';
   end if;
 
   if new.estado = old.estado then return new; end if;
@@ -801,7 +830,7 @@ begin
     raise exception 'La orden ya fue entregada y no admite cambios.';
   end if;
 
-  if new.estado = 'en_proceso' and old.estado in ('pendiente', 'terminada') then
+  if new.estado = 'en_proceso' and old.estado in ('pendiente', 'control_calidad', 'terminada') then
     if v_rol not in ('gerencia', 'mecanico') then
       raise exception 'Solo el taller inicia el trabajo.';
     end if;
@@ -811,9 +840,31 @@ begin
     if new.iniciada_en is null then new.iniciada_en := now(); end if;
     new.terminada_en := null;
 
-  elsif new.estado = 'terminada' and old.estado = 'en_proceso' then
+    /* Volver al taller invalida la revisión anterior: si el auto se toca de
+       nuevo, lo que se controló ya no describe cómo quedó. Dejarla marcada
+       sería peor que no tenerla, porque se leería como revisado. */
+    new.control_aceite     := false;
+    new.control_neumaticos := false;
+    new.control_frenos     := false;
+    new.control_luces      := false;
+
+  -- El trabajo se da por hecho y pasa a revisión. No se salta a 'terminada':
+  -- avisarle al cliente que venga a buscar el auto es lo que hay del otro lado
+  -- de esa etapa, y por eso el control no puede ser opcional.
+  elsif new.estado = 'control_calidad' and old.estado = 'en_proceso' then
+    if v_rol not in ('gerencia', 'mecanico') then
+      raise exception 'Solo el taller manda el trabajo a control de calidad.';
+    end if;
+
+  elsif new.estado = 'terminada' and old.estado = 'control_calidad' then
     if v_rol not in ('gerencia', 'mecanico') then
       raise exception 'Solo el taller marca el trabajo como terminado.';
+    end if;
+    -- Los cuatro puntos de la revisión. Se exigen acá y no solo en la pantalla
+    -- porque una checklist que se puede saltear no es una checklist.
+    if not (new.control_aceite and new.control_neumaticos
+            and new.control_frenos and new.control_luces) then
+      raise exception 'Completá los cuatro puntos del control de calidad antes de dar el trabajo por listo.';
     end if;
     new.terminada_en := now();
 
@@ -852,7 +903,16 @@ create trigger trg_avance_orden
 -- Lo que no hace es pedir el CAE: eso es un ida y vuelta con ARCA que puede
 -- tardar o fallar, y el cliente no se puede quedar esperando el auto por eso.
 -- El comprobante queda pendiente y se emite desde Facturación.
-create or replace function public.entregar_orden(p_orden uuid)
+-- La firma cambió al sumar el medio de pago y el próximo service, y hay que
+-- soltar la anterior: `create or replace` con parámetros nuevos deja las dos
+-- versiones conviviendo, y una llamada con un solo argumento queda ambigua.
+drop function if exists public.entregar_orden(uuid);
+
+create or replace function public.entregar_orden(
+  p_orden           uuid,
+  p_medio_pago      text default null,
+  p_proximo_service date default null
+)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare
   v_orden  ordenes;
@@ -879,7 +939,11 @@ begin
   -- El plan es opcional: una orden sin renglones no tiene qué facturar, y
   -- una venta de cero ensuciaría Ventas y las estadísticas.
   if not exists (select 1 from orden_items where orden_id = p_orden) then
-    update ordenes set estado = 'entregada' where id = p_orden;
+    update ordenes set
+      estado          = 'entregada',
+      medio_pago      = coalesce(nullif(btrim(p_medio_pago), ''), medio_pago),
+      proximo_service = coalesce(p_proximo_service, proximo_service)
+    where id = p_orden;
     return null;
   end if;
 
@@ -900,7 +964,12 @@ begin
   -- producto: la mano de obra pasa de largo.
   update ventas set estado = 'confirmada' where id = v_venta;
 
-  update ordenes set estado = 'entregada', venta_id = v_venta where id = p_orden;
+  update ordenes set
+    estado          = 'entregada',
+    venta_id        = v_venta,
+    medio_pago      = coalesce(nullif(btrim(p_medio_pago), ''), medio_pago),
+    proximo_service = coalesce(p_proximo_service, proximo_service)
+  where id = p_orden;
 
   -- El comprobante queda pendiente de CAE, esperando a administración.
   perform public.facturar_venta(v_venta);
@@ -908,8 +977,8 @@ begin
   return v_venta;
 end $$;
 
-revoke all on function public.entregar_orden(uuid) from public;
-grant execute on function public.entregar_orden(uuid) to authenticated;
+revoke all on function public.entregar_orden(uuid, text, date) from public;
+grant execute on function public.entregar_orden(uuid, text, date) to authenticated;
 
 -- ---------------------------------------------------------------- personal
 

@@ -45,9 +45,10 @@ trabaja; recepción entrega y cobra.
 | Etapa | Quién | Qué pasa |
 | --- | --- | --- |
 | `pendiente` | Vendedor / Gerencia | Se identifica al cliente (o se lo da de alta ahí mismo), se registran vehículo, patente, kilometraje y lo que viene a resolver, y se asigna el mecánico. La orden ya aparece en el tablero del taller. |
-| `en_proceso` | Mecánico / Gerencia | El taller la toma y trabaja. Sin mecánico asignado no arranca. |
-| `terminada` | Mecánico / Gerencia | El trabajo está listo para entregar. |
-| `entregada` | Vendedor / Gerencia | Se entrega el vehículo. En un solo paso se cierra la orden, se genera la venta, se descuenta el stock de los repuestos y queda armado el comprobante para administración. |
+| `en_proceso` | Mecánico / Gerencia | El taller la toma y trabaja. Sin mecánico asignado no arranca. Acá se cargan hallazgos y diagnóstico, y se sacan las fotos del vehículo. |
+| `control_calidad` | Mecánico / Gerencia | El trabajo está hecho y se revisa: nivel de aceite, presión de neumáticos, frenos y luces. |
+| `terminada` | Mecánico / Gerencia | Pasó el control y está listo para entregar. El trigger no deja llegar acá con la revisión incompleta. |
+| `entregada` | Vendedor / Gerencia | Se entrega el vehículo, con su medio de pago y el próximo service. En un solo paso se cierra la orden, se genera la venta, se descuenta el stock de los repuestos y queda armado el comprobante para administración. |
 
 El **plan de trabajo** (`orden_items`: mano de obra y repuestos con precio) es
 aparte y opcional. Se carga desde el mostrador cuando se sabe qué lleva —antes,
@@ -56,7 +57,7 @@ taller. Una orden entregada sin plan simplemente no genera venta.
 
 Las etapas no son un rótulo: el trigger `validar_avance_orden` rechaza los
 atajos. No se arranca sin mecánico asignado, no se entrega sin haber terminado
-y una orden entregada no se reabre ni se corrige. El mecánico puede mover el
+y no se da un trabajo por listo sin completar los cuatro puntos del control de calidad, y una orden entregada no se reabre ni se corrige. El mecánico puede mover el
 estado y tomar la orden, pero no tocar importes ni datos del cliente: RLS
 decide filas, no columnas, así que eso lo aplica el trigger.
 

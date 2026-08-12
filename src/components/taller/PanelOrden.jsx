@@ -4,9 +4,17 @@ import { ArrowRight, FileText, Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthProvider'
 import { useConsulta } from '../../hooks/useConsulta'
 import { supabase } from '../../lib/supabase'
-import { fecha, numero, plata } from '../../lib/formato'
+import { fecha, fechaCorta, numero, plata } from '../../lib/formato'
 import { estadoDe, numeroComprobante, tipoDe } from '../../lib/fiscal'
-import { avanceDe, etapaDe, puedeEditarPlan, puedeEditarRecepcion } from '../../lib/taller'
+import {
+  CONTROLES,
+  avanceDe,
+  controlCompleto,
+  etapaDe,
+  puedeEditarPlan,
+  puedeEditarRecepcion,
+  puedeEditarTrabajo,
+} from '../../lib/taller'
 import FotosVehiculo from './FotosVehiculo'
 import { Aviso, Boton, Campo, Cargando, Etiqueta, Modal, estiloInput } from '../UI'
 
@@ -18,6 +26,10 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
   const { sesion, rol } = useAuth()
   const [error, setError] = useState('')
   const [trabajando, setTrabajando] = useState(false)
+  /* La entrega pide dos datos más —cómo pagó y cuándo vuelve— así que en vez
+     de avanzar de una abre su formulario. El resto de los pasos siguen siendo
+     un solo clic: pedir confirmación en cada etapa cansa y no protege nada. */
+  const [entregando, setEntregando] = useState(false)
 
   const etapa = etapaDe(orden.estado)
   const paso = avanceDe(orden.estado, rol)
@@ -43,12 +55,16 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
     onCambio()
   }
 
-  const avanzar = async () => {
+  const avanzar = async (entrega = null) => {
     setTrabajando(true)
     setError('')
 
     if (paso.destino === 'entregada') {
-      const { error } = await supabase.rpc('entregar_orden', { p_orden: orden.id })
+      const { error } = await supabase.rpc('entregar_orden', {
+        p_orden: orden.id,
+        p_medio_pago: entrega?.medio_pago || null,
+        p_proximo_service: entrega?.proximo_service || null,
+      })
       if (error) setError(error.message)
       else {
         onCambio()
@@ -96,6 +112,28 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
             fotos —lo dice RLS—, así que ahí solo se miran. */}
         <FotosVehiculo orden={orden} editable={orden.estado !== 'entregada'} />
 
+        {/* Lo que encontró el taller. Aparece recién cuando el auto entró al
+            elevador: en una orden que todavía nadie tocó sería un formulario
+            vacío pidiendo que lo llenen. */}
+        {orden.estado !== 'pendiente' && (
+          <Trabajo
+            orden={orden}
+            editable={puedeEditarTrabajo(orden, rol)}
+            onGuardado={onCambio}
+          />
+        )}
+
+        {['en_proceso', 'control_calidad', 'terminada', 'entregada'].includes(orden.estado) && (
+          <ControlCalidad
+            orden={orden}
+            editable={
+              puedeEditarTrabajo(orden, rol) &&
+              ['en_proceso', 'control_calidad'].includes(orden.estado)
+            }
+            onGuardado={onCambio}
+          />
+        )}
+
         <Plan
           orden={orden}
           items={items}
@@ -121,12 +159,35 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
 
         <Aviso>{error}</Aviso>
 
+        {entregando && (
+          <Entrega
+            orden={orden}
+            trabajando={trabajando}
+            onCancelar={() => setEntregando(false)}
+            onConfirmar={avanzar}
+          />
+        )}
+
         <div className="flex flex-wrap justify-end gap-2 border-t border-concreto-200 pt-4">
           <Boton variante="secundario" onClick={onCerrar}>
             Cerrar
           </Boton>
           {paso ? (
-            <Boton onClick={avanzar} disabled={trabajando}>
+            <Boton
+              onClick={() => (paso.destino === 'entregada' ? setEntregando(true) : avanzar())}
+              /* El control incompleto frena el paso en la base igual; acá se
+                 deshabilita para que no haya que descubrirlo con un error. */
+              disabled={
+                trabajando ||
+                entregando ||
+                (paso.destino === 'terminada' && !controlCompleto(orden))
+              }
+              title={
+                paso.destino === 'terminada' && !controlCompleto(orden)
+                  ? 'Completá los cuatro puntos del control de calidad.'
+                  : undefined
+              }
+            >
               {trabajando ? 'Guardando…' : paso.texto} <ArrowRight size={15} />
             </Boton>
           ) : (
@@ -250,6 +311,213 @@ function Recepcion({ orden, editable, onGuardado }) {
         </div>
       )}
     </Bloque>
+  )
+}
+
+/* Lo que el cliente dijo está arriba, en Recepción. Esto es lo otro: lo que el
+   auto tenía de verdad. Son dos campos y no uno porque no son lo mismo —el
+   hallazgo es lo que se ve, el diagnóstico es qué lo explica— y separarlos es
+   lo que después sostiene un adicional frente al cliente. */
+function Trabajo({ orden, editable, onGuardado }) {
+  const [editando, setEditando] = useState(false)
+  const [form, setForm] = useState({
+    hallazgos: orden.hallazgos ?? '',
+    diagnostico: orden.diagnostico ?? '',
+  })
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const campo = (k) => ({
+    value: form[k],
+    onChange: (e) => setForm({ ...form, [k]: e.target.value }),
+  })
+
+  const guardar = async () => {
+    setGuardando(true)
+    setError('')
+
+    const { error } = await supabase
+      .from('ordenes')
+      .update({
+        hallazgos: form.hallazgos.trim() || null,
+        diagnostico: form.diagnostico.trim() || null,
+      })
+      .eq('id', orden.id)
+
+    if (error) setError(error.message)
+    else {
+      setEditando(false)
+      onGuardado()
+    }
+    setGuardando(false)
+  }
+
+  return (
+    <Bloque
+      titulo="Diagnóstico del taller"
+      accion={
+        editable && !editando ? (
+          <Boton variante="fantasma" className="px-2 py-1" onClick={() => setEditando(true)}>
+            {orden.hallazgos || orden.diagnostico ? 'Editar' : 'Cargar'}
+          </Boton>
+        ) : null
+      }
+    >
+      {editando ? (
+        <div className="space-y-3">
+          <Campo etiqueta="Hallazgos" ayuda="Lo que apareció al revisar el vehículo.">
+            <textarea
+              rows={3}
+              className={estiloInput}
+              placeholder="Rótulas con juego. Amortiguadores traseros sulfatados."
+              {...campo('hallazgos')}
+            />
+          </Campo>
+          <Campo etiqueta="Diagnóstico" ayuda="Qué lo explica y qué hay que hacer.">
+            <textarea
+              rows={3}
+              className={estiloInput}
+              placeholder="El ruido viene del tren delantero. Hay que cambiar las dos rótulas y alinear."
+              {...campo('diagnostico')}
+            />
+          </Campo>
+
+          <Aviso>{error}</Aviso>
+
+          <div className="flex justify-end gap-2">
+            <Boton variante="secundario" onClick={() => setEditando(false)}>
+              Cancelar
+            </Boton>
+            <Boton onClick={guardar} disabled={guardando}>
+              {guardando ? 'Guardando…' : 'Guardar'}
+            </Boton>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <Dato etiqueta="Hallazgos">{orden.hallazgos}</Dato>
+          <Dato etiqueta="Diagnóstico">{orden.diagnostico}</Dato>
+        </div>
+      )}
+    </Bloque>
+  )
+}
+
+/* La revisión antes de avisarle al cliente. Cada punto se guarda solo al
+   tildarlo: es una lista que se completa con el auto delante y guardar al
+   final obligaría a volver a la pantalla con las manos sucias. */
+function ControlCalidad({ orden, editable, onGuardado }) {
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState('')
+
+  const marcar = async (campo, valor) => {
+    setGuardando(campo)
+    setError('')
+
+    const { error } = await supabase
+      .from('ordenes')
+      .update({ [campo]: valor })
+      .eq('id', orden.id)
+
+    if (error) setError(error.message)
+    else onGuardado()
+    setGuardando('')
+  }
+
+  const listos = CONTROLES.filter((c) => orden[c.campo]).length
+
+  return (
+    <Bloque titulo="Control de calidad">
+      <ul className="space-y-1">
+        {CONTROLES.map((c) => (
+          <li key={c.campo}>
+            <label
+              className={`flex items-center gap-2.5 rounded-md px-1 py-1.5 text-sm ${
+                editable ? 'cursor-pointer hover:bg-concreto-50' : ''
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(orden[c.campo])}
+                disabled={!editable || guardando === c.campo}
+                onChange={(e) => marcar(c.campo, e.target.checked)}
+                className="h-4 w-4 shrink-0 accent-perez-600"
+              />
+              <span className={orden[c.campo] ? 'text-caucho-900' : 'text-acero-500'}>
+                {c.texto}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-2 border-t border-concreto-200 pt-2 text-xs text-acero-500">
+        {listos === CONTROLES.length
+          ? 'Revisión completa.'
+          : `${listos} de ${CONTROLES.length}. El trabajo no pasa a listo hasta completarla.`}
+      </p>
+
+      <Aviso>{error}</Aviso>
+    </Bloque>
+  )
+}
+
+/* Lo último que se pregunta antes de que el auto se vaya. El medio de pago va
+   acá y no en Facturación porque quien cobra es el que entrega, y el próximo
+   service porque es el momento en que el cliente todavía está enfrente. */
+const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Débito', 'Crédito', 'Cuenta corriente']
+
+function Entrega({ orden, trabajando, onCancelar, onConfirmar }) {
+  const [medioPago, setMedioPago] = useState(orden.medio_pago ?? 'Efectivo')
+  const [proximoService, setProximoService] = useState('')
+
+  return (
+    <div className="space-y-3 rounded-lg border border-concreto-200 bg-concreto-50 p-3">
+      <p className="text-menor font-semibold text-caucho-800">Datos de la entrega</p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Campo etiqueta="Medio de pago">
+          <select
+            className={estiloInput}
+            value={medioPago}
+            onChange={(e) => setMedioPago(e.target.value)}
+          >
+            {MEDIOS_PAGO.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </Campo>
+        <Campo etiqueta="Próximo service" ayuda="Opcional. Queda en el historial del cliente.">
+          <input
+            type="date"
+            className={estiloInput}
+            value={proximoService}
+            onChange={(e) => setProximoService(e.target.value)}
+          />
+        </Campo>
+      </div>
+
+      <p className="text-xs text-acero-500">
+        Al confirmar se cierra la orden, se registra la venta, se descuenta el stock de los
+        repuestos y queda el comprobante esperando en Facturación.
+      </p>
+
+      <div className="flex justify-end gap-2">
+        <Boton variante="secundario" onClick={onCancelar} disabled={trabajando}>
+          Cancelar
+        </Boton>
+        <Boton
+          onClick={() =>
+            onConfirmar({ medio_pago: medioPago, proximo_service: proximoService || null })
+          }
+          disabled={trabajando}
+        >
+          {trabajando ? 'Entregando…' : 'Confirmar entrega'}
+        </Boton>
+      </div>
+    </div>
   )
 }
 
@@ -598,6 +866,19 @@ function Trazabilidad({ orden }) {
           </li>
         ))}
       </ul>
+
+      {/* Lo que se definió al entregar. Va acá y no en un bloque propio porque
+          es parte de cómo terminó esta orden, no algo que se pueda editar. */}
+      {(orden.medio_pago || orden.proximo_service) && (
+        <div className="mt-2 grid gap-3 border-t border-concreto-200 pt-2 sm:grid-cols-2">
+          {orden.medio_pago && <Dato etiqueta="Medio de pago">{orden.medio_pago}</Dato>}
+          {/* `fechaCorta` y no `fecha`: el próximo service es un día del
+              calendario, y `fecha` le agregaría un "00:00" sin sentido. */}
+          {orden.proximo_service && (
+            <Dato etiqueta="Próximo service">{fechaCorta(orden.proximo_service)}</Dato>
+          )}
+        </div>
+      )}
     </Bloque>
   )
 }
