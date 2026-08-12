@@ -786,6 +786,43 @@ const SECCIONES = [
     ),
   },
   {
+    id: 'asistente',
+    titulo: 'El asistente',
+    roles: ['gerencia'],
+    resumen: 'Preguntarle al sistema en vez de buscar la pantalla.',
+    contenido: (
+      <>
+        <p className="text-sm text-caucho-800">
+          Está en <strong>Ayuda → Asistente</strong> y contesta preguntas sobre lo que hay cargado:
+          stock, ventas, clientes, taller, facturación, comisiones y caja. Los datos los saca de la
+          base en el momento, no de memoria.
+        </p>
+        <Lista>
+          <Item rotulo="Preguntale como le hablarías a un empleado">
+            «¿Cuánto vendimos esta semana?», «¿qué falta reponer?», «¿qué le hicimos al Corsa de
+            Gómez?», «¿quedaron facturas sin emitir?».
+          </Item>
+          <Item rotulo="Se acuerda de lo anterior">
+            Después de preguntar por un mes podés decir «¿y el anterior?» sin repetir todo.
+          </Item>
+          <Item rotulo="Abajo de cada respuesta dice qué miró">
+            Sirve para saber si fue a buscar el dato o te está contestando de taquito.
+          </Item>
+          <Item rotulo="Solo mira, no toca">
+            No puede cargar una venta, cambiar un precio ni mover una orden. Eso se sigue haciendo
+            en su pantalla.
+          </Item>
+        </Lista>
+        <Nota tono="atencion">
+          Es una máquina y se puede equivocar al interpretar una pregunta torcida. Antes de tomar
+          una decisión con un número que te dio, mirá la pantalla que corresponde. Y como cruza
+          sueldos, ventas y caja de todo el local, la pantalla es solo tuya: no aparece en el menú
+          de nadie más.
+        </Nota>
+      </>
+    ),
+  },
+  {
     id: 'problemas',
     titulo: 'Si algo no funciona',
     roles: TODOS,

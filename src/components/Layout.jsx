@@ -4,6 +4,7 @@ import {
   Banknote,
   BarChart3,
   BookOpen,
+  Bot,
   Boxes,
   Contact,
   FileText,
@@ -45,6 +46,11 @@ const navegacion = [
    trabajo, es a donde se va cuando algo no se entiende. Mezclarlo con las
    demás lo convertiría en una parada más del recorrido diario. */
 const ayuda = [
+  /* Va en Ayuda y no en Gestión por lo mismo que el manual: no es una parada
+     del circuito de trabajo, es a dónde se va cuando hace falta preguntar. La
+     diferencia es que el manual explica el sistema y el asistente además mira
+     adentro. Solo gerencia. */
+  { a: '/asistente', texto: 'Asistente', icono: Bot, roles: ['gerencia'] },
   { a: '/manual', texto: 'Manual de uso', icono: BookOpen, roles: ['gerencia', 'vendedor', 'mecanico'] },
 ]
 

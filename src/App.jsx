@@ -15,6 +15,7 @@ import Caja from './pages/Caja'
 import Chat from './pages/Chat'
 import Comisiones from './pages/Comisiones'
 import Manual from './pages/Manual'
+import Asistente from './pages/Asistente'
 
 /* Estadísticas arrastra recharts (~300 kB). Es la única pantalla que lo usa y
    solo la ve gerencia: cargarla aparte le ahorra la descarga a todo el resto,
@@ -150,6 +151,18 @@ export default function App() {
           element={
             <SoloRoles roles={['gerencia', 'vendedor']}>
               <Clientes />
+            </SoloRoles>
+          }
+        />
+        <Route
+          path="/asistente"
+          element={
+            /* Cruza ventas, comisiones y caja de todo el local en una sola
+               respuesta: es la mirada de gerencia y de nadie más. La pantalla
+               es la mitad de la barrera; la otra la pone `api/asistente.js`,
+               que verifica el rol antes de contestar. */
+            <SoloRoles roles={['gerencia']}>
+              <Asistente />
             </SoloRoles>
           }
         />

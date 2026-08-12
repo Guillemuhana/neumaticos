@@ -127,7 +127,9 @@ src/
   lib/fiscal.js         condiciones de IVA, tipos de comprobante, validación de CUIT
   pages/                Login, Inicio, Stock, Ventas, Clientes, Taller,
                         Facturacion, Caja, Comisiones, Chat, Personal,
-                        Estadisticas, Manual
+                        Estadisticas, Manual, Asistente
+api/
+  asistente.js          función de servidor del asistente (Groq + herramientas)
 ```
 
 ## Los otros módulos
@@ -157,6 +159,52 @@ el elevador: lo informa el taller y lo responde el mostrador, que es quien
 habla con el cliente. La garantía es el trabajo que volvió: cuelga de la orden
 entregada y le aparece al mecánico que lo hizo.
 
+## El asistente
+
+Una pantalla de conversación, solo para gerencia, donde se le pregunta al
+sistema en castellano: «¿cuánto vendimos esta semana?», «¿qué falta reponer?»,
+«¿qué le hicimos al Corsa de Gómez?». Corre sobre Groq.
+
+Vive en `api/asistente.js`, una función de servidor, y no en el navegador, por
+dos razones que no se pueden esquivar. La primera es la clave: Vite inlinea en
+el bundle todo lo que empieza con `VITE_`, así que una clave ahí es una clave
+publicada. La segunda es la confianza: el navegador puede pedir lo que quiera,
+y quién está preguntando se verifica contra Supabase antes de contestar nada.
+
+**El modelo no escribe SQL.** Tiene trece herramientas —`resumen_ventas`,
+`buscar_productos`, `historial_vehiculo`, `estado_caja`…— que son consultas
+fijas de solo lectura. El modelo elige cuál llamar y con qué argumentos; qué
+tabla se toca y qué columnas salen, no lo decide él. No hay forma de que una
+pregunta termine en un `delete`.
+
+Y las consultas salen con el token de quien pregunta, no con la service role:
+**RLS sigue mandando igual que en el resto de la app**. El servidor no gana
+permisos por ser servidor. Encima de eso, la función exige rol `gerencia`: que
+la pantalla no aparezca en el menú de los demás no alcanza, porque la URL se
+puede llamar sin pantalla.
+
+Además de los datos, el asistente sabe *cómo funciona el negocio* —las cinco
+etapas de una orden, por qué la venta y el comprobante son cosas distintas,
+cómo se mide una comisión—, porque la mitad de lo que se consulta no es un dato
+sino un «¿cómo se hace esto?», y para eso no hay tabla. Eso está escrito en la
+constante `INSTRUCCION` del mismo archivo: si cambia una regla del circuito,
+se actualiza ahí.
+
+### Configuración
+
+En Vercel → Settings → Environment Variables:
+
+| Variable | Para qué |
+| --- | --- |
+| `GROQ_API_KEY` | La clave de [console.groq.com](https://console.groq.com). **Sin** prefijo `VITE_`. |
+| `GROQ_MODEL` | Opcional. Por defecto `llama-3.3-70b-versatile`. Groq rota su catálogo; si el modelo desaparece, se cambia acá sin tocar código. |
+| `SUPABASE_ANON_KEY` | Solo si no están ya cargadas `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`, que es de donde las toma si faltan. |
+
+En local, `npm run dev` **no** levanta la función: Vite sirve el `index.html`
+para cualquier ruta que no sea un archivo, y el asistente responde que no está
+corriendo. Para probarlo hace falta `vercel dev`, que sirve el front y la
+función juntos.
+
 ## Pendiente
 
 - `public/logo-perez.png` (el logo referenciado por Login e Inicio)
@@ -166,6 +214,9 @@ entregada y le aparece al mecánico que lo hizo.
 - Notas de crédito, para revertir un comprobante ya emitido
 - Exportar la orden y el presupuesto a PDF
 - Calendario de turnos por técnico
+- Que el asistente pueda además *hacer* cosas (cargar un recordatorio, abrir
+  una orden). Hoy solo consulta, a propósito: escribir pide confirmación
+  explícita en pantalla antes de que la base se entere.
 - El logo de la empresa en la papelería (los datos ya son configurables)
 
 ## Antes de usarlo con datos reales
