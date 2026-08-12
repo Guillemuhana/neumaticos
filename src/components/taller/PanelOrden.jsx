@@ -134,6 +134,10 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
           />
         )}
 
+        {/* Lo que apareció de más, con el auto ya en el elevador. Va antes del
+            plan porque es lo que puede cambiarlo. */}
+        {orden.estado !== 'pendiente' && <Hallazgos orden={orden} rol={rol} />}
+
         <Plan
           orden={orden}
           items={items}
@@ -1043,6 +1047,163 @@ function Garantias({ orden, rol }) {
           <div className="flex justify-end">
             <Boton onClick={registrar} disabled={guardando || !motivo.trim()}>
               Registrar garantía
+            </Boton>
+          </div>
+        </div>
+      )}
+
+      <Aviso>{error}</Aviso>
+    </Bloque>
+  )
+}
+
+/* Lo que el mecánico encuentra de más: una rótula gastada cuando el cliente
+   vino por una alineación.
+
+   No se arregla y después se avisa —así aparecen los adicionales que nadie
+   aceptó— ni se frena el trabajo hasta que alguien pase por el taller. El
+   taller lo informa, el mostrador llama al cliente y marca la respuesta, y
+   queda escrito quién dijo qué: es lo único que sirve si después se discute
+   el importe. */
+function Hallazgos({ orden, rol }) {
+  const { sesion } = useAuth()
+  const [descripcion, setDescripcion] = useState('')
+  const [estimado, setEstimado] = useState('')
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const { datos, cargando, recargar } = useConsulta(
+    () =>
+      supabase
+        .from('orden_hallazgos')
+        .select('*')
+        .eq('orden_id', orden.id)
+        .order('informado_en', { ascending: false }),
+    [orden.id]
+  )
+
+  const informa = ['gerencia', 'mecanico'].includes(rol) && orden.estado !== 'entregada'
+  const responde = ['gerencia', 'vendedor'].includes(rol) && orden.estado !== 'entregada'
+
+  const informar = async () => {
+    setGuardando(true)
+    setError('')
+
+    const { error } = await supabase.from('orden_hallazgos').insert({
+      orden_id: orden.id,
+      descripcion: descripcion.trim(),
+      estimado: estimado === '' ? null : Number(estimado),
+      informado_por: sesion.user.id,
+    })
+
+    if (error) setError(error.message)
+    else {
+      setDescripcion('')
+      setEstimado('')
+      recargar()
+    }
+    setGuardando(false)
+  }
+
+  const responder = async (hallazgo, estado) => {
+    setGuardando(true)
+    setError('')
+
+    const { error } = await supabase
+      .from('orden_hallazgos')
+      .update({
+        estado,
+        respondido_por: sesion.user.id,
+        respondido_en: new Date().toISOString(),
+      })
+      .eq('id', hallazgo.id)
+
+    if (error) setError(error.message)
+    else recargar()
+    setGuardando(false)
+  }
+
+  if (cargando) return null
+  if (!datos?.length && !informa) return null
+
+  const tono = { informado: 'atencion', aprobado: 'conforme', rechazado: 'neutro' }
+  const texto = { informado: 'Esperando al cliente', aprobado: 'Aprobado', rechazado: 'Rechazado' }
+
+  return (
+    <Bloque titulo="Hallazgos para aprobar">
+      {!datos?.length ? (
+        <p className="py-1 text-sm text-acero-500">
+          Sin hallazgos informados. Si aparece algo que el cliente no pidió, cargalo acá antes de
+          hacerlo.
+        </p>
+      ) : (
+        <ul className="mb-3 divide-y divide-concreto-200">
+          {datos.map((h) => (
+            <li key={h.id} className="py-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <p className="text-sm text-caucho-900">{h.descripcion}</p>
+                <Etiqueta tono={tono[h.estado]}>{texto[h.estado]}</Etiqueta>
+              </div>
+              <p className="mt-0.5 text-xs text-acero-500">
+                {fecha(h.informado_en)}
+                {h.estimado != null && ` · estimado ${plata(h.estimado)}`}
+              </p>
+
+              {h.estado === 'informado' && responde && (
+                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                  <Boton
+                    variante="secundario"
+                    className="px-2 py-1"
+                    onClick={() => responder(h, 'rechazado')}
+                    disabled={guardando}
+                  >
+                    El cliente dijo que no
+                  </Boton>
+                  <Boton
+                    className="px-2 py-1"
+                    onClick={() => responder(h, 'aprobado')}
+                    disabled={guardando}
+                  >
+                    Aprobado
+                  </Boton>
+                </div>
+              )}
+
+              {h.estado === 'aprobado' && (
+                <p className="mt-1 text-xs text-conforme-700">
+                  Cargalo en el plan de trabajo para que se facture.
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {informa && (
+        <div className="mt-2 space-y-2">
+          <Campo
+            etiqueta="Nuevo hallazgo"
+            ayuda="Requiere aprobación del cliente: el mostrador lo llama y responde acá."
+          >
+            <input
+              className={estiloInput}
+              placeholder="Rótula derecha con juego. Conviene cambiarla ahora."
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+            />
+          </Campo>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <Campo etiqueta="Estimado (opcional)">
+              <input
+                type="number"
+                min="0"
+                className={`${estiloInput} w-40`}
+                value={estimado}
+                onChange={(e) => setEstimado(e.target.value)}
+              />
+            </Campo>
+            <Boton onClick={informar} disabled={guardando || !descripcion.trim()}>
+              Informar hallazgo
             </Boton>
           </div>
         </div>

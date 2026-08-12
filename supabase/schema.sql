@@ -790,6 +790,37 @@ create table if not exists orden_fotos (
 
 create index if not exists orden_fotos_orden_idx on orden_fotos (orden_id, momento);
 
+-- ------------------------------------------- hallazgos para aprobación
+-- Lo que el mecánico encuentra de más, con el auto ya en el elevador: una
+-- rótula gastada cuando el cliente vino por una alineación. No se arregla y
+-- después se avisa —eso es como aparecen los adicionales que nadie aceptó— ni
+-- se frena el trabajo hasta que alguien pase por el taller a preguntar.
+--
+-- El mecánico lo informa, el mostrador llama al cliente y marca la respuesta.
+-- Queda escrito quién dijo qué y cuándo, que es lo único que sirve si después
+-- se discute el importe.
+
+do $h$ begin
+  create type estado_hallazgo as enum ('informado', 'aprobado', 'rechazado');
+exception when duplicate_object then null; end $h$;
+
+create table if not exists orden_hallazgos (
+  id            uuid primary key default gen_random_uuid(),
+  orden_id      uuid not null references ordenes on delete cascade,
+  descripcion   text not null,
+  estado        estado_hallazgo not null default 'informado',
+  -- Lo que costaría, si el mecánico puede estimarlo. Es una referencia para
+  -- la llamada, no un precio: el que se cobra es el del plan de trabajo.
+  estimado      numeric(12,2),
+  informado_por uuid references perfiles on delete set null,
+  informado_en  timestamptz not null default now(),
+  respuesta     text,
+  respondido_por uuid references perfiles on delete set null,
+  respondido_en timestamptz
+);
+
+create index if not exists orden_hallazgos_orden_idx on orden_hallazgos (orden_id, estado);
+
 -- --------------------------------------------------- avance de las órdenes
 -- El guardián del circuito. Cada transición dice desde dónde sale y quién
 -- puede hacerla; lo que no está listado, no pasa. Los sellos de tiempo los
@@ -1358,6 +1389,7 @@ alter table chat_lecturas      enable row level security;
 alter table cajas              enable row level security;
 alter table recordatorios      enable row level security;
 alter table garantias          enable row level security;
+alter table orden_hallazgos    enable row level security;
 alter table empresa            enable row level security;
 alter table comprobantes       enable row level security;
 alter table comprobante_items  enable row level security;
@@ -1498,6 +1530,27 @@ create policy orden_fotos_crear on orden_fotos for insert to authenticated
 drop policy if exists orden_fotos_borrar on orden_fotos;
 create policy orden_fotos_borrar on orden_fotos for delete to authenticated
   using (public.es_gerencia());
+
+-- Hallazgos: los informa el taller —es quien tiene el auto delante— y los
+-- responde el mostrador, que es quien habla con el cliente. Separar las dos
+-- puntas es lo que hace que la aprobación quede registrada como tal y no como
+-- "me dijeron que sí".
+drop policy if exists orden_hallazgos_leer on orden_hallazgos;
+create policy orden_hallazgos_leer on orden_hallazgos for select to authenticated using (true);
+
+drop policy if exists orden_hallazgos_informar on orden_hallazgos;
+create policy orden_hallazgos_informar on orden_hallazgos for insert to authenticated
+  with check (
+    public.mi_rol() in ('gerencia', 'mecanico')
+    and informado_por = auth.uid()
+    and estado = 'informado'
+    and exists (select 1 from ordenes o where o.id = orden_id and o.estado <> 'entregada')
+  );
+
+drop policy if exists orden_hallazgos_responder on orden_hallazgos;
+create policy orden_hallazgos_responder on orden_hallazgos for update to authenticated
+  using (public.mi_rol() in ('gerencia', 'vendedor'))
+  with check (public.mi_rol() in ('gerencia', 'vendedor'));
 
 -- Facturación: es escritorio de administración. El mecánico no ve importes
 -- del cliente ni datos fiscales, y no tiene por qué.
