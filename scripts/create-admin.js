@@ -74,12 +74,12 @@ async function crearAdmin() {
   }
 
   const existing = await fetchJson(`/users?email=${encodeURIComponent(email)}`)
-  console.log('DEBUG existing response:', JSON.stringify(existing, null, 2))
   const users = Array.isArray(existing)
     ? existing
     : existing?.users ?? []
-  console.log('DEBUG users array length:', users.length)
-  const user = users[0]
+  // El endpoint admin ignora el filtro ?email= y devuelve la lista completa:
+  // hay que buscar la coincidencia a mano o se termina pisando otra cuenta.
+  const user = users.find((u) => u.email?.toLowerCase() === email.toLowerCase())
 
   if (user) {
     console.log('El usuario ya existe. Actualizando contraseña, metadata y perfil...')
