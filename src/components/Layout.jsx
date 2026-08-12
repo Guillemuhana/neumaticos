@@ -113,7 +113,11 @@ export default function Layout() {
     /* Barra clara, plana, separada del contenido por una línea y no por un
        bloque de color: la jerarquía la hace el fondo hueso de la página, que
        es apenas más claro que este gris. */
-    <div className="relative flex h-full flex-col overflow-hidden border-r border-concreto-200 bg-concreto-100 p-4">
+    /* Scrollea: el menú creció a once entradas y en un celular chico el pie
+       —con el usuario y el botón de salir— quedaba abajo del borde de la
+       pantalla, sin forma de llegar. `mt-auto` lo sigue empujando al fondo
+       cuando sobra alto. */
+    <div className="relative flex h-full flex-col overflow-y-auto border-r border-concreto-200 bg-concreto-100 p-4">
       {/* Franja del logo, apenas insinuada: ubica la marca sin gritar. */}
       <span className="franja absolute inset-y-0 left-0 w-0.5 opacity-60" aria-hidden="true" />
 
@@ -159,15 +163,20 @@ export default function Layout() {
             <p className="truncate text-sm font-semibold text-caucho-950">{perfil?.nombre}</p>
             <p className="text-xs text-acero-500">{nombreRol[rol] ?? '—'}</p>
           </div>
-          <button
-            onClick={cerrarSesion}
-            aria-label="Salir"
-            title="Salir"
-            className="shrink-0 rounded-lg p-2 text-acero-500 transition-colors hover:bg-white hover:text-caucho-950"
-          >
-            <LogOut size={16} />
-          </button>
         </div>
+
+        {/* Con texto y no un icono suelto: salir es una acción que se busca
+            leyendo, y una puerta dibujada en 16px no se encuentra. Va en
+            outline —borde gris, fondo transparente— para que no compita con
+            el ítem activo del menú, que es el otro elemento marcado de la
+            barra. */}
+        <button
+          onClick={cerrarSesion}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-acero-200 px-3 py-2 text-sm font-medium text-caucho-800 transition-colors hover:bg-white hover:text-caucho-950"
+        >
+          <LogOut size={15} aria-hidden="true" />
+          Cerrar sesión
+        </button>
       </div>
     </div>
   )
