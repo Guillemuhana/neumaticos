@@ -176,8 +176,11 @@ function TarjetaOrden({ orden, destacar, mia = false, onAbrir }) {
 
   return (
     <Tarjeta
+      /* La tarjeta ya no trae borde propio, así que el resaltado tiene que
+         declarar el ancho además del color: `border-perez-200` solo no pinta
+         nada. Es un anillo interior para no correr el contenido 1px. */
       className={`elevar w-full cursor-pointer p-3 text-left ${
-        destacar ? 'border-perez-200' : ''
+        destacar ? 'ring-1 ring-inset ring-perez-200' : ''
       }`}
       role="button"
       tabIndex={0}

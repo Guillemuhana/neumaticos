@@ -85,13 +85,12 @@ export function Cargando({ texto = 'Cargando…', alto = 'min-h-screen' }) {
   )
 }
 
+/* Plana: sin borde y con una sombra que apenas se adivina. Lo que separa la
+   tarjeta del fondo es el medio tono de diferencia entre su blanco y el hueso
+   de la página; agregarle un contorno de 1px la convertía en una caja
+   dibujada, que es justo lo contrario del aire que pide el diseño. */
 export function Tarjeta({ className = '', ...props }) {
-  return (
-    <div
-      className={`sombra-1 rounded-xl border border-concreto-200 bg-white ${className}`}
-      {...props}
-    />
-  )
+  return <div className={`sombra-1 rounded-xl bg-white ${className}`} {...props} />
 }
 
 /* Dos formas del mismo encabezado.
@@ -202,18 +201,22 @@ export function Segmentado({ opciones, valor, onCambio, etiqueta }) {
   )
 }
 
-/* Los tonos van por significado, no por color: 'estado' decide el color. */
+/* Los tonos van por significado, no por color: 'estado' decide el color.
+
+   Pastilla pastel y texto en el tono oscuro de la misma familia, sin anillo:
+   el borde interior le agregaba una tercera línea a algo que mide 18px de
+   alto, y a ese tamaño lo único que se lee es la mancha de color. */
 export function Etiqueta({ tono = 'neutro', children }) {
   const tonos = {
-    neutro: 'bg-concreto-100 text-acero-500 ring-concreto-200',
-    marca: 'bg-perez-50 text-perez-700 ring-perez-100',
-    atencion: 'bg-atencion-50 text-atencion-700 ring-atencion-100',
-    conforme: 'bg-conforme-50 text-conforme-700 ring-conforme-100',
+    neutro: 'bg-concreto-100 text-caucho-700',
+    marca: 'bg-perez-100 text-perez-800',
+    atencion: 'bg-atencion-100 text-atencion-700',
+    conforme: 'bg-conforme-100 text-conforme-700',
   }
 
   return (
     <span
-      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-micro font-semibold ring-1 ring-inset ${tonos[tono]}`}
+      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-micro font-semibold ${tonos[tono]}`}
     >
       {children}
     </span>
@@ -238,7 +241,9 @@ export function Tabla({ columnas, children }) {
                 <th
                   key={texto || `col-${i}`}
                   scope="col"
-                  className={`px-4 py-2.5 text-micro font-semibold uppercase tracking-wide text-acero-500 ${
+                  /* Rótulo chico, en mayúsculas y con letra espaciada: es lo
+                     que lo separa del dato sin necesidad de una línea. */
+                  className={`px-4 py-3 text-micro font-semibold uppercase tracking-wider text-acero-500 ${
                     cifra ? 'text-right' : ''
                   }`}
                 >

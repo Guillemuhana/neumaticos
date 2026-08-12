@@ -81,7 +81,10 @@ body {
   font-family: var(--font-sans);
   /* Fondo plano. El degradado radial anterior competía con las tarjetas y
      hacía que el blanco se leyera sucio en la mitad oscura de la pantalla. */
-  background: #F4F4F2;
+  /* Hueso, apenas más cálido que el blanco de las tarjetas: la separación la
+     hace esa diferencia mínima y no un borde, que es lo que vuelve editorial
+     al conjunto en vez de "una pila de cajas". */
+  background: #F9F9F7;
   color: var(--color-caucho-900);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
