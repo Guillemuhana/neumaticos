@@ -11,7 +11,7 @@ export default function Pausada() {
         <img
           src="/logo-perez.png"
           alt="Neumáticos y Servicios Pérez"
-          className="mx-auto h-16 w-auto"
+          className="mx-auto h-20 w-auto"
         />
 
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-concreto-100 text-acero-500">

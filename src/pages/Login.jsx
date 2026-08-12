@@ -41,7 +41,7 @@ export default function Login() {
             <img
               src="/logo-perez.png"
               alt="Neumáticos y Servicios Pérez"
-              className="w-64"
+              className="w-72"
             />
           </div>
         </div>
@@ -64,7 +64,7 @@ export default function Login() {
           <img
             src="/logo-perez.png"
             alt="Neumáticos y Servicios Pérez"
-            className="mb-2 w-40 lg:hidden"
+            className="mb-2 w-48 lg:hidden"
           />
           <div>
             <h2 className="display text-3xl font-bold tracking-tight text-caucho-950">Entrá a tu cuenta</h2>

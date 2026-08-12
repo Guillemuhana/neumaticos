@@ -127,7 +127,10 @@ export default function Layout() {
       {/* Franja del logo, apenas insinuada: ubica la marca sin gritar. */}
       <span className="franja absolute inset-y-0 left-0 w-0.5 opacity-60" aria-hidden="true" />
 
-      <div className="mb-6 rounded-lg bg-white px-3 py-2.5">
+      {/* Se sale del padding del panel y casi no lleva el suyo: el PNG trae
+          bastante aire blanco propio a los costados, así que el escudo queda
+          más chico de lo que mide su caja. */}
+      <div className="-mx-2 mb-6 rounded-lg bg-white px-1.5 py-2">
         <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-full" />
       </div>
 
@@ -194,7 +197,7 @@ export default function Layout() {
       </aside>
 
       <header className="no-imprimir sticky top-0 z-30 flex items-center justify-between border-b border-concreto-200/80 bg-white/85 px-4 py-3 backdrop-blur-md lg:hidden">
-        <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-28" />
+        <img src="/logo-perez.png" alt="Neumáticos y Servicios Pérez" className="w-32" />
         <button
           onClick={() => setAbierto(true)}
           aria-label="Abrir menú"
