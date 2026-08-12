@@ -60,6 +60,38 @@ export function AuthProvider({ children }) {
     }
   }, [traerPerfil])
 
+  /* Revocar una sesión desde Supabase no echa a quien ya tiene la app
+     abierta: el token que guarda el navegador está firmado y sigue siendo
+     válido hasta que vence, así que la pestaña anda sola durante una hora sin
+     preguntarle nada al servidor.
+
+     `getUser()` sí pregunta. Se consulta al volver a la pestaña —que es
+     cuando alguien retoma el trabajo— y así una sesión dada de baja se corta
+     en el momento en que la persona vuelve a mirar la pantalla, en vez de
+     seguir viva hasta que el token expire.
+
+     Solo cierra ante una respuesta del servidor que diga que la sesión no
+     vale. Un error de red no echa a nadie: quedarse sin señal en el taller es
+     lo más común que hay, y desloguear por eso sería peor que el problema. */
+  useEffect(() => {
+    const verificar = async () => {
+      if (document.visibilityState !== 'visible') return
+      const { data } = await supabase.auth.getSession()
+      if (!data.session) return
+
+      const { error } = await supabase.auth.getUser()
+      if (error?.status === 401 || error?.status === 403) await supabase.auth.signOut()
+    }
+
+    document.addEventListener('visibilitychange', verificar)
+    window.addEventListener('focus', verificar)
+
+    return () => {
+      document.removeEventListener('visibilitychange', verificar)
+      window.removeEventListener('focus', verificar)
+    }
+  }, [])
+
   const iniciarSesion = (email, password) =>
     supabase.auth.signInWithPassword({ email, password })
 
