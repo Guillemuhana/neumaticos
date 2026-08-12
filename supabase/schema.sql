@@ -980,6 +980,197 @@ end $$;
 revoke all on function public.entregar_orden(uuid, text, date) from public;
 grant execute on function public.entregar_orden(uuid, text, date) to authenticated;
 
+-- ------------------------------------------------------------- comisiones
+-- El vendedor cobra un porcentaje de lo que vendió; el mecánico, de la mano de
+-- obra que trabajó. Los repuestos no entran en la comisión del taller: el
+-- mecánico no los vende, los coloca.
+--
+-- El porcentaje vive en el perfil porque es un acuerdo con la persona y no un
+-- dato de cada venta. Cambiarlo no reescribe el pasado: lo ya liquidado quedó
+-- congelado en su liquidación, con el porcentaje que regía ese día.
+
+alter table perfiles add column if not exists comision_pct numeric(5,2) not null default 0;
+
+do $ppc$ begin
+  alter table perfiles add constraint perfiles_comision_razonable
+    check (comision_pct >= 0 and comision_pct <= 100);
+exception when duplicate_object then null; end $ppc$;
+
+-- Cada liquidación cierra un tramo de tiempo. Lo que se debe es siempre lo
+-- generado después de la última: no hay un campo "pagado" que alguien pueda
+-- destildar, y una liquidación no se edita ni se borra, igual que un
+-- comprobante. Si salió mal, se corrige liquidando la diferencia.
+create table if not exists liquidaciones (
+  id         uuid primary key default gen_random_uuid(),
+  perfil_id  uuid not null references perfiles on delete cascade,
+  desde      timestamptz not null,
+  hasta      timestamptz not null,
+  -- La base es lo vendido o la mano de obra del tramo; el porcentaje se copia
+  -- porque es el que se acordó ese día, no el que figure hoy en el perfil.
+  base       numeric(12,2) not null default 0,
+  porcentaje numeric(5,2) not null default 0,
+  monto      numeric(12,2) not null default 0,
+  creada_en  timestamptz not null default now(),
+  creada_por uuid references perfiles on delete set null,
+  constraint liquidaciones_tramo check (hasta > desde)
+);
+
+create index if not exists liquidaciones_perfil_idx on liquidaciones (perfil_id, hasta desc);
+
+-- Lo que se debe hoy, por persona. Va en la base y no en el navegador porque
+-- cruza ventas, órdenes y liquidaciones, y porque así el vendedor puede ver lo
+-- suyo sin que RLS le tenga que abrir las ventas de los demás.
+create or replace function public.comisiones_pendientes()
+returns table (
+  perfil_id  uuid,
+  nombre     text,
+  rol        rol_usuario,
+  porcentaje numeric,
+  desde      timestamptz,
+  base       numeric,
+  comision   numeric
+)
+language sql stable security definer set search_path = public as $fn$
+  with gente as (
+    select p.id, p.nombre, p.rol, p.comision_pct
+      from perfiles p
+     where p.activo
+       and p.rol in ('vendedor', 'mecanico')
+       -- Gerencia ve al equipo entero; cada uno, lo propio y nada más.
+       and (public.es_gerencia() or p.id = auth.uid())
+  ),
+  corte as (
+    select g.id, coalesce(max(l.hasta), '-infinity'::timestamptz) as desde
+      from gente g
+      left join liquidaciones l on l.perfil_id = g.id
+     group by g.id
+  ),
+  medido as (
+    select
+      g.id,
+      case g.rol
+        when 'vendedor' then (
+          select coalesce(sum(v.total), 0)
+            from ventas v
+           where v.vendedor_id = g.id
+             and v.estado = 'confirmada'
+             and v.creada_en > c.desde
+        )
+        else (
+          -- Solo la mano de obra, y solo de órdenes ya entregadas: un trabajo
+          -- a medias todavía puede cambiar de importe.
+          select coalesce(sum(i.cantidad * i.precio_unitario), 0)
+            from ordenes o
+            join orden_items i on i.orden_id = o.id and i.tipo = 'servicio'
+           where o.mecanico_id = g.id
+             and o.estado = 'entregada'
+             and o.cerrada_en > c.desde
+        )
+      end as base
+    from gente g
+    join corte c on c.id = g.id
+  )
+  select
+    g.id, g.nombre, g.rol, g.comision_pct, c.desde, m.base,
+    round(m.base * g.comision_pct / 100, 2)
+  from gente g
+  join corte c on c.id = g.id
+  join medido m on m.id = g.id
+  order by g.rol, g.nombre;
+$fn$;
+
+revoke all on function public.comisiones_pendientes() from public;
+grant execute on function public.comisiones_pendientes() to authenticated;
+
+-- El mismo cálculo abierto por día, para los últimos N. Es lo que se mira
+-- cuando alguien pregunta de dónde salió el número.
+create or replace function public.comisiones_por_dia(p_perfil uuid, p_dias integer default 7)
+returns table (dia date, base numeric, comision numeric)
+language sql stable security definer set search_path = public as $fn$
+  with quien as (
+    select p.id, p.rol, p.comision_pct
+      from perfiles p
+     where p.id = p_perfil
+       and (public.es_gerencia() or p.id = auth.uid())
+  ),
+  dias as (
+    select generate_series(
+      current_date - (greatest(p_dias, 1) - 1),
+      current_date,
+      interval '1 day'
+    )::date as dia
+  ),
+  movimiento as (
+    select v.creada_en::date as dia, v.total as importe
+      from ventas v
+      join quien q on q.rol = 'vendedor' and v.vendedor_id = q.id
+     where v.estado = 'confirmada'
+    union all
+    select o.cerrada_en::date, i.cantidad * i.precio_unitario
+      from ordenes o
+      join orden_items i on i.orden_id = o.id and i.tipo = 'servicio'
+      join quien q on q.rol = 'mecanico' and o.mecanico_id = q.id
+     where o.estado = 'entregada'
+  )
+  select
+    d.dia,
+    coalesce(sum(m.importe), 0),
+    round(coalesce(sum(m.importe), 0) * coalesce((select comision_pct from quien), 0) / 100, 2)
+  from dias d
+  left join movimiento m on m.dia = d.dia
+  group by d.dia
+  order by d.dia;
+$fn$;
+
+revoke all on function public.comisiones_por_dia(uuid, integer) from public;
+grant execute on function public.comisiones_por_dia(uuid, integer) to authenticated;
+
+-- Liquidar es cerrar el tramo: se congela lo que se debe hasta este instante y
+-- lo que venga después empieza a contar de nuevo. Va en una función para que
+-- el importe lo calcule la base; si lo mandara la pantalla, cualquiera podría
+-- liquidarse el número que quisiera.
+create or replace function public.liquidar_comision(p_perfil uuid)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare
+  v_fila   record;
+  v_alta   timestamptz;
+  v_id     uuid;
+begin
+  if not public.es_gerencia() then
+    raise exception 'Solo gerencia liquida comisiones.';
+  end if;
+
+  select * into v_fila from public.comisiones_pendientes() where perfil_id = p_perfil;
+  if not found then
+    raise exception 'Esa persona no tiene comisiones para liquidar.';
+  end if;
+
+  if v_fila.comision <= 0 then
+    raise exception 'No hay nada pendiente de liquidar.';
+  end if;
+
+  -- El primer tramo no tiene principio: se ancla en el alta del perfil, para
+  -- que la liquidación diga un rango legible y no "desde el infinito".
+  select creado_en into v_alta from perfiles where id = p_perfil;
+
+  insert into liquidaciones (perfil_id, desde, hasta, base, porcentaje, monto, creada_por)
+  values (
+    p_perfil,
+    greatest(v_fila.desde, v_alta),
+    now(),
+    v_fila.base,
+    v_fila.porcentaje,
+    v_fila.comision,
+    auth.uid()
+  )
+  returning id into v_id;
+
+  return v_id;
+end $fn$;
+
+revoke all on function public.liquidar_comision(uuid) from public;
+grant execute on function public.liquidar_comision(uuid) to authenticated;
+
 -- ---------------------------------------------------------------- personal
 
 do $$ begin
@@ -1007,6 +1198,7 @@ alter table venta_items        enable row level security;
 alter table ordenes            enable row level security;
 alter table vehiculos          enable row level security;
 alter table fichadas           enable row level security;
+alter table liquidaciones      enable row level security;
 alter table empresa            enable row level security;
 alter table comprobantes       enable row level security;
 alter table comprobante_items  enable row level security;
@@ -1179,6 +1371,13 @@ create policy comprobante_items_leer on comprobante_items for select to authenti
     public.mi_rol() in ('gerencia', 'vendedor')
     and exists (select 1 from comprobantes c where c.id = comprobante_id)
   );
+
+-- Liquidaciones: cada uno ve las suyas y gerencia las de todos. No hay
+-- política de insert, update ni delete a propósito: nacen únicamente en
+-- `liquidar_comision` y después son un recibo, no un registro editable.
+drop policy if exists liquidaciones_leer on liquidaciones;
+create policy liquidaciones_leer on liquidaciones for select to authenticated
+  using (perfil_id = auth.uid() or public.es_gerencia());
 
 -- Fichadas: cada uno ficha lo propio y no puede editarlo después.
 drop policy if exists fichadas_leer on fichadas;

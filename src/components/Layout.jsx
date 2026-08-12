@@ -6,6 +6,7 @@ import {
   Boxes,
   Contact,
   FileText,
+  HandCoins,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -28,6 +29,8 @@ const navegacion = [
      vehículo se entrega y el comprobante queda esperando acá. */
   { a: '/facturacion', texto: 'Facturación', icono: FileText, roles: ['gerencia', 'vendedor'] },
   { a: '/personal', texto: 'Personal', icono: Users, roles: ['gerencia', 'vendedor', 'mecanico'] },
+  /* Cada uno ve lo suyo; gerencia ve al equipo y es la única que liquida. */
+  { a: '/comisiones', texto: 'Comisiones', icono: HandCoins, roles: ['gerencia', 'vendedor', 'mecanico'] },
   { a: '/estadisticas', texto: 'Estadísticas', icono: BarChart3, roles: ['gerencia'] },
 ]
 

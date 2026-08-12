@@ -11,6 +11,7 @@ import Facturacion from './pages/Facturacion'
 import Taller from './pages/Taller'
 import Personal from './pages/Personal'
 import Clientes from './pages/Clientes'
+import Comisiones from './pages/Comisiones'
 import Manual from './pages/Manual'
 
 /* Estadísticas arrastra recharts (~300 kB). Es la única pantalla que lo usa y
@@ -117,6 +118,17 @@ export default function App() {
           }
         />
         <Route path="/personal" element={<Personal />} />
+        <Route
+          path="/comisiones"
+          element={
+            /* Cada uno puede ver lo suyo: la función de la base ya filtra por
+               persona, y saber cuánto se ganó no es dato de gerencia. Quien
+               liquida sí es solo gerencia, y eso lo decide Postgres. */
+            <SoloRoles roles={['gerencia', 'vendedor', 'mecanico']}>
+              <Comisiones />
+            </SoloRoles>
+          }
+        />
         {/* Sin `SoloRoles`: el manual lo ve todo el equipo y se filtra solo,
             mostrándole a cada uno las secciones de su puesto. */}
         <Route path="/manual" element={<Manual />} />

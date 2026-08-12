@@ -509,6 +509,52 @@ const SECCIONES = [
     ),
   },
   {
+    id: 'comisiones',
+    titulo: 'Comisiones',
+    roles: TODOS,
+    resumen: 'Cuánto se lleva cada uno y cómo se salda.',
+    contenido: (
+      <>
+        <p className="text-sm text-caucho-800">
+          El vendedor cobra un porcentaje de lo que vendió; el mecánico, de la{' '}
+          <strong>mano de obra</strong> que trabajó. Los repuestos no entran en la comisión del
+          taller: el mecánico no los vende, los coloca.
+        </p>
+        <Pasos>
+          <Paso numero={1} titulo="Mirá lo que se debe">
+            <p>
+              Cada uno ve lo suyo; gerencia ve al equipo entero. Lo que figura es lo acumulado{' '}
+              <strong>desde la última liquidación</strong>, no del mes: si nunca se liquidó, es todo
+              lo que se generó.
+            </p>
+          </Paso>
+          <Paso numero={2} titulo="Revisá de dónde sale">
+            <p>
+              Tocando una fila se abre el detalle día por día de la última semana. Es lo que hay que
+              mirar cuando el número no cierra con lo que uno recuerda.
+            </p>
+          </Paso>
+          <Paso numero={3} titulo="Liquidá">
+            <p>
+              <strong>Liquidar</strong> cierra el tramo: se congela el importe y lo que venga
+              después empieza a contar de cero. Queda registrado con el porcentaje del día y no se
+              puede editar ni borrar, igual que un comprobante.
+            </p>
+          </Paso>
+        </Pasos>
+        <Nota>
+          El porcentaje se cambia escribiéndolo en la tabla, y lo hace gerencia. Cambiarlo{' '}
+          <strong>no reescribe el pasado</strong>: lo ya liquidado quedó con el porcentaje que
+          regía ese día.
+        </Nota>
+        <Nota tono="atencion">
+          La comisión del mecánico cuenta recién cuando la orden se entrega, porque hasta ese
+          momento el importe todavía puede cambiar. La del vendedor, cuando la venta se confirma.
+        </Nota>
+      </>
+    ),
+  },
+  {
     id: 'ventas',
     titulo: 'Ventas de mostrador',
     roles: MOSTRADOR,
