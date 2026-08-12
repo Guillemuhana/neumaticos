@@ -1220,7 +1220,13 @@ create table if not exists mensajes (
   -- La ruta dentro del bucket, no la URL, por lo mismo que en las fotos del
   -- vehículo: el enlace público se arma al vuelo y puede dejar de servir.
   adjunto_ruta text,
-  adjunto_tipo text check (adjunto_tipo in ('foto', 'audio')),
+  adjunto_tipo text check (adjunto_tipo in ('foto', 'audio', 'archivo')),
+  -- El nombre con el que vino el archivo, que es con el que se lo baja. En el
+  -- bucket se guarda con un UUID —dos personas mandan «presupuesto.pdf» el
+  -- mismo día y uno pisaría al otro—, y un UUID en la carpeta de descargas no
+  -- le dice nada a nadie.
+  adjunto_nombre text,
+  adjunto_peso   bigint,
   creado_en    timestamptz not null default now(),
   -- Un mensaje vacío no es un mensaje. Sin esto, tocar "Enviar" sin escribir
   -- nada llena el canal de burbujas en blanco.
@@ -1232,6 +1238,18 @@ create table if not exists mensajes (
     or (adjunto_ruta is not null and adjunto_tipo is not null)
   )
 );
+
+-- El chat arrancó aceptando solo fotos y audios. Un remito escaneado, un
+-- presupuesto del proveedor o el PDF del seguro son lo que igual termina
+-- circulando por WhatsApp, que es justo de donde se lo quiso sacar.
+alter table mensajes add column if not exists adjunto_nombre text;
+alter table mensajes add column if not exists adjunto_peso   bigint;
+
+do $adj$ begin
+  alter table mensajes drop constraint if exists mensajes_adjunto_tipo_check;
+  alter table mensajes add constraint mensajes_adjunto_tipo_check
+    check (adjunto_tipo in ('foto', 'audio', 'archivo'));
+end $adj$;
 
 create index if not exists mensajes_creado_idx on mensajes (creado_en desc);
 
