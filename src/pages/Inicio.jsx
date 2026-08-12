@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import {
   AlertTriangle,
+  BellRing,
   ClipboardList,
   HandCoins,
   Package,
   Plus,
   Receipt,
+  ShieldAlert,
   TrendingUp,
   Wrench,
 } from 'lucide-react'
@@ -12,9 +15,21 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
-import { hora, numero, plata } from '../lib/formato'
+import { fechaCorta, hora, numero, plata } from '../lib/formato'
 import { etapaDe } from '../lib/taller'
-import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Metrica, Tabla, Tarjeta, Vacio } from '../components/UI'
+import {
+  Aviso,
+  Boton,
+  Campo,
+  Cargando,
+  Encabezado,
+  Etiqueta,
+  Metrica,
+  Tabla,
+  Tarjeta,
+  Vacio,
+  estiloInput,
+} from '../components/UI'
 
 /* La primera pantalla no es la misma para los tres puestos, porque el día no
    empieza igual: gerencia mira el local, el vendedor mira lo que vendió y el
@@ -74,8 +89,8 @@ function DiaVendedor() {
   const { perfil } = useAuth()
   const navigate = useNavigate()
 
-  const { datos, cargando, error } = useConsulta(async () => {
-    const [hoy, mes] = await Promise.all([
+  const { datos, cargando, error, recargar } = useConsulta(async () => {
+    const [hoy, mes, recordatorios] = await Promise.all([
       supabase
         .from('ventas')
         .select('id, total, creada_en, clientes(nombre)')
@@ -87,12 +102,19 @@ function DiaVendedor() {
         .select('total')
         .eq('estado', 'confirmada')
         .gte('creada_en', inicioDelMes()),
+      /* RLS ya devuelve solo los propios: la agenda de otro no le sirve a
+         nadie más que a esa persona. */
+      supabase
+        .from('recordatorios')
+        .select('*, clientes(nombre)')
+        .eq('hecho', false)
+        .order('para', { nullsFirst: false }),
     ])
 
-    const fallo = hoy.error || mes.error
+    const fallo = hoy.error || mes.error || recordatorios.error
     if (fallo) return { error: fallo }
 
-    return { data: { hoy: hoy.data, mes: mes.data } }
+    return { data: { hoy: hoy.data, mes: mes.data, recordatorios: recordatorios.data } }
   }, [])
 
   if (cargando) return <Cargando texto="Armando tu día…" alto="min-h-[40vh]" />
@@ -116,13 +138,11 @@ function DiaVendedor() {
         />
         <Metrica icono={TrendingUp} titulo="Vendido en el mes" valor={plata(vendidoMes)} pie={`${datos.mes.length} venta(s)`} />
         <Metrica
-          icono={HandCoins}
-          tono="conforme"
-          titulo="Comisión del mes"
-          valor={plata((vendidoMes * pct) / 100)}
-          pie="Sobre lo vendido en el mes"
-          onClick={() => navigate('/comisiones')}
-          className="cursor-pointer"
+          icono={BellRing}
+          tono={datos.recordatorios.length ? 'atencion' : 'neutro'}
+          titulo="Recordatorios"
+          valor={numero(datos.recordatorios.length)}
+          pie="Pendientes tuyos"
         />
       </div>
 
@@ -154,7 +174,107 @@ function DiaVendedor() {
           )}
         </Tarjeta>
       </section>
+
+      <Recordatorios lista={datos.recordatorios} onCambio={recargar} />
     </>
+  )
+}
+
+/* La agenda del mostrador: llamar a alguien, avisar que llegó un repuesto,
+   recordar un service. Se carga desde acá porque es donde se mira, y no en una
+   pantalla aparte a la que habría que acordarse de entrar. */
+function Recordatorios({ lista, onCambio }) {
+  const { sesion } = useAuth()
+  const [tarea, setTarea] = useState('')
+  const [para, setPara] = useState('')
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const agregar = async (e) => {
+    e.preventDefault()
+    if (!tarea.trim()) return
+
+    setGuardando(true)
+    setError('')
+    const { error } = await supabase.from('recordatorios').insert({
+      perfil_id: sesion.user.id,
+      tarea: tarea.trim(),
+      para: para || null,
+    })
+
+    if (error) setError(error.message)
+    else {
+      setTarea('')
+      setPara('')
+      onCambio()
+    }
+    setGuardando(false)
+  }
+
+  const marcar = async (r) => {
+    const { error } = await supabase.from('recordatorios').update({ hecho: true }).eq('id', r.id)
+    if (error) setError(error.message)
+    else onCambio()
+  }
+
+  return (
+    <section className="mt-6">
+      <h2 className="display mb-3 text-base font-bold">Tus recordatorios</h2>
+      <Tarjeta className="p-4">
+        <Aviso>{error}</Aviso>
+
+        <form onSubmit={agregar} className="mb-3 flex flex-wrap items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <Campo etiqueta="Tarea">
+              <input
+                className={estiloInput}
+                placeholder="Llamar a Gómez, llegaron las cubiertas"
+                value={tarea}
+                onChange={(e) => setTarea(e.target.value)}
+              />
+            </Campo>
+          </div>
+          <Campo etiqueta="Para el">
+            <input
+              type="date"
+              className={estiloInput}
+              value={para}
+              onChange={(e) => setPara(e.target.value)}
+            />
+          </Campo>
+          <Boton type="submit" disabled={guardando || !tarea.trim()}>
+            <Plus size={15} /> Agregar
+          </Boton>
+        </form>
+
+        {!lista.length ? (
+          <p className="py-2 text-sm text-acero-500">No tenés nada pendiente.</p>
+        ) : (
+          <ul className="divide-y divide-concreto-200">
+            {lista.map((r) => (
+              <li key={r.id} className="flex items-center gap-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => marcar(r)}
+                  aria-label={`Marcar como hecho: ${r.tarea}`}
+                  className="h-4 w-4 shrink-0 accent-perez-600"
+                />
+                <span className="min-w-0 flex-1 text-sm text-caucho-900">
+                  {r.tarea}
+                  {r.clientes?.nombre && (
+                    <span className="text-acero-500"> · {r.clientes.nombre}</span>
+                  )}
+                </span>
+                {r.para && (
+                  <span className="shrink-0 text-xs text-acero-500">{fechaCorta(r.para)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Tarjeta>
+    </section>
   )
 }
 
@@ -182,12 +302,21 @@ function DiaMecanico() {
         .eq('ordenes.mecanico_id', sesion.user.id)
         .eq('ordenes.estado', 'entregada')
         .gte('ordenes.cerrada_en', inicioDelMes()),
+      /* Los trabajos propios que volvieron. Se filtra por el mecánico de la
+         orden y no por quien cargó el reclamo: lo que importa es de quién era
+         el trabajo que falló. */
+      supabase
+        .from('garantias')
+        .select('id, motivo, creada_en, ordenes!inner(vehiculo, patente, mecanico_id, clientes(nombre))')
+        .eq('estado', 'pendiente')
+        .eq('ordenes.mecanico_id', sesion.user.id)
+        .order('creada_en', { ascending: false }),
     ])
 
-    const fallo = mias.error || manoDeObra.error
+    const fallo = mias.error || manoDeObra.error || garantias.error
     if (fallo) return { error: fallo }
 
-    return { data: { mias: mias.data, manoDeObra: manoDeObra.data } }
+    return { data: { mias: mias.data, manoDeObra: manoDeObra.data, garantias: garantias.data } }
   }, [sesion.user.id])
 
   if (cargando) return <Cargando texto="Buscando tus trabajos…" alto="min-h-[40vh]" />
@@ -227,6 +356,13 @@ function DiaMecanico() {
           titulo="Entregados en el mes"
           valor={numero(delMes.length)}
           pie="Vehículos que salieron"
+        />
+        <Metrica
+          icono={ShieldAlert}
+          tono={datos.garantias.length ? 'atencion' : 'neutro'}
+          titulo="Garantías pendientes"
+          valor={numero(datos.garantias.length)}
+          pie="Trabajos tuyos que volvieron"
         />
         <Metrica
           icono={HandCoins}
@@ -278,6 +414,37 @@ function DiaMecanico() {
           )}
         </Tarjeta>
       </section>
+
+      {datos.garantias.length > 0 && (
+        <section className="mt-6">
+          <h2 className="display mb-3 text-base font-bold">Garantías pendientes</h2>
+          <Tarjeta>
+            <Tabla columnas={['Vehículo', 'Cliente', 'Motivo']}>
+              {datos.garantias.map((g) => (
+                <tr
+                  key={g.id}
+                  className="rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none"
+                >
+                  <td data-label="Vehículo" className="px-4 py-2.5 font-medium">
+                    {g.ordenes?.vehiculo}
+                    {g.ordenes?.patente && (
+                      <span className="ml-2 font-mono text-xs uppercase text-acero-500">
+                        {g.ordenes.patente}
+                      </span>
+                    )}
+                  </td>
+                  <td data-label="Cliente" className="px-4 py-2.5 text-acero-500">
+                    {g.ordenes?.clientes?.nombre ?? '—'}
+                  </td>
+                  <td data-label="Motivo" className="px-4 py-2.5">
+                    {g.motivo}
+                  </td>
+                </tr>
+              ))}
+            </Tabla>
+          </Tarjeta>
+        </section>
+      )}
     </>
   )
 }

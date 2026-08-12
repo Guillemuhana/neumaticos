@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
+  Banknote,
   BarChart3,
   BookOpen,
   Boxes,
   Contact,
   FileText,
   HandCoins,
-  MessageSquare,
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquare,
   Receipt,
   Users,
   Wrench,
@@ -30,6 +31,7 @@ const navegacion = [
   /* Va pegada al taller porque es su continuación: el trabajo termina, el
      vehículo se entrega y el comprobante queda esperando acá. */
   { a: '/facturacion', texto: 'Facturación', icono: FileText, roles: ['gerencia', 'vendedor'] },
+  { a: '/caja', texto: 'Caja', icono: Banknote, roles: ['gerencia', 'vendedor'] },
   { a: '/personal', texto: 'Personal', icono: Users, roles: ['gerencia', 'vendedor', 'mecanico'] },
   /* Cada uno ve lo suyo; gerencia ve al equipo y es la única que liquida. */
   { a: '/comisiones', texto: 'Comisiones', icono: HandCoins, roles: ['gerencia', 'vendedor', 'mecanico'] },

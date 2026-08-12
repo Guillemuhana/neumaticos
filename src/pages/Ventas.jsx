@@ -26,6 +26,7 @@ const textoEstado = { cotizacion: 'Cotización', confirmada: 'Confirmada', anula
 export default function Ventas() {
   const navigate = useNavigate()
   const [creando, setCreando] = useState(false)
+  const [confirmando, setConfirmando] = useState(null)
   const [aviso, setAviso] = useState('')
 
   /* Los comprobantes vienen aparte y se cruzan acá: la venta y el comprobante
@@ -51,10 +52,15 @@ export default function Ventas() {
   /* El error va al cartel de la pantalla y no a un `alert` del navegador: el
      diálogo del sistema frena todo, se ve de otra época y encima aparece con
      tipografía y botones que no son los de la app. */
-  const cambiarEstado = async (venta, estado) => {
+  const cambiarEstado = async (venta, estado, medioPago = null) => {
     setAviso('')
-    const { error } = await supabase.from('ventas').update({ estado }).eq('id', venta.id)
+    /* El medio de pago se guarda solo al confirmar: en una cotización todavía
+       no se cobró nada, y es lo que después deja separar el efectivo del cajón
+       al cerrar la caja. */
+    const cambios = medioPago ? { estado, medio_pago: medioPago } : { estado }
+    const { error } = await supabase.from('ventas').update(cambios).eq('id', venta.id)
     if (error) setAviso(error.message)
+    setConfirmando(null)
     recargar()
   }
 
@@ -118,7 +124,7 @@ export default function Ventas() {
                 </td>
                 <td data-label="Acciones" className="px-4 py-3 text-right">
                   {v.estado === 'cotizacion' && (
-                    <Boton variante="fantasma" className="px-2 py-1" onClick={() => cambiarEstado(v, 'confirmada')}>
+                    <Boton variante="fantasma" className="px-2 py-1" onClick={() => setConfirmando(v)}>
                       <Check size={15} /> Confirmar
                     </Boton>
                   )}
@@ -141,6 +147,14 @@ export default function Ventas() {
           </Tabla>
         )}
       </Tarjeta>
+
+      {confirmando && (
+        <CobrarVenta
+          venta={confirmando}
+          onCerrar={() => setConfirmando(null)}
+          onConfirmar={(medio) => cambiarEstado(confirmando, 'confirmada', medio)}
+        />
+      )}
 
       {creando && (
         <NuevaVenta
@@ -375,6 +389,57 @@ function NuevaVenta({ onCerrar, onGuardada }) {
           </Boton>
         </div>
       </form>
+    </Modal>
+  )
+}
+
+/* Confirmar una venta es cobrarla: ahí se descuenta el stock y ahí se sabe con
+   qué pagó el cliente. Preguntarlo acá y no en Facturación es lo que permite
+   que el cierre de caja separe el efectivo del cajón de lo que entró por
+   transferencia. */
+const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Débito', 'Crédito', 'Cuenta corriente']
+
+function CobrarVenta({ venta, onCerrar, onConfirmar }) {
+  const [medio, setMedio] = useState(venta.medio_pago ?? 'Efectivo')
+  const [guardando, setGuardando] = useState(false)
+
+  return (
+    <Modal titulo="Confirmar venta" onCerrar={onCerrar}>
+      <div className="space-y-4">
+        <p className="text-sm text-acero-500">
+          {venta.clientes?.nombre ?? 'Consumidor final'} ·{' '}
+          <span className="font-semibold text-caucho-900">{plata(venta.total)}</span>
+        </p>
+
+        <Campo etiqueta="Medio de pago">
+          <select className={estiloInput} value={medio} onChange={(e) => setMedio(e.target.value)}>
+            {MEDIOS_PAGO.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </Campo>
+
+        <p className="text-xs text-acero-500">
+          Al confirmar se descuenta el stock de los artículos. Hasta ahora no se movió nada.
+        </p>
+
+        <div className="flex justify-end gap-2">
+          <Boton variante="secundario" onClick={onCerrar} disabled={guardando}>
+            Cancelar
+          </Boton>
+          <Boton
+            onClick={() => {
+              setGuardando(true)
+              onConfirmar(medio)
+            }}
+            disabled={guardando}
+          >
+            {guardando ? 'Confirmando…' : 'Confirmar y cobrar'}
+          </Boton>
+        </div>
+      </div>
     </Modal>
   )
 }

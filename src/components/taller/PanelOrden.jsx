@@ -155,6 +155,11 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
           <Comprobante ventaId={orden.venta_id} />
         )}
 
+        {/* El reclamo cuelga de la orden entregada, no del cliente: lo que se
+            discute es *este* trabajo, y desde acá salen solos el vehículo, el
+            mecánico que lo hizo y las fotos de cómo entró y cómo salió. */}
+        {orden.estado === 'entregada' && <Garantias orden={orden} rol={rol} />}
+
         <Trazabilidad orden={orden} />
 
         <Aviso>{error}</Aviso>
@@ -879,6 +884,171 @@ function Trazabilidad({ orden }) {
           )}
         </div>
       )}
+    </Bloque>
+  )
+}
+
+/* El cliente vuelve diciendo que lo que se arregló falló. Lo carga el
+   mostrador, que es quien recibe el reclamo, y le aparece al mecánico en su
+   panel: el trabajo era suyo y tiene que enterarse sin que se lo cuenten. */
+function Garantias({ orden, rol }) {
+  const { sesion } = useAuth()
+  const [motivo, setMotivo] = useState('')
+  const [resolviendo, setResolviendo] = useState(null)
+  const [resolucion, setResolucion] = useState('')
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const { datos, cargando, recargar } = useConsulta(
+    () =>
+      supabase
+        .from('garantias')
+        .select('*')
+        .eq('orden_id', orden.id)
+        .order('creada_en', { ascending: false }),
+    [orden.id]
+  )
+
+  const registrar = async () => {
+    setGuardando(true)
+    setError('')
+
+    const { error } = await supabase.from('garantias').insert({
+      orden_id: orden.id,
+      motivo: motivo.trim(),
+      creada_por: sesion.user.id,
+    })
+
+    if (error) setError(error.message)
+    else {
+      setMotivo('')
+      recargar()
+    }
+    setGuardando(false)
+  }
+
+  const cerrar = async (garantia, estado) => {
+    setGuardando(true)
+    setError('')
+
+    const { error } = await supabase
+      .from('garantias')
+      .update({
+        estado,
+        resolucion: resolucion.trim(),
+        resuelta_por: sesion.user.id,
+        resuelta_en: new Date().toISOString(),
+      })
+      .eq('id', garantia.id)
+
+    if (error) setError(error.message)
+    else {
+      setResolviendo(null)
+      setResolucion('')
+      recargar()
+    }
+    setGuardando(false)
+  }
+
+  const abiertas = (datos ?? []).filter((g) => g.estado === 'pendiente')
+  const puedeRegistrar = ['gerencia', 'vendedor'].includes(rol)
+
+  if (cargando) return null
+
+  return (
+    <Bloque titulo="Garantías">
+      {!datos?.length ? (
+        <p className="py-1 text-sm text-acero-500">
+          {puedeRegistrar
+            ? 'Sin reclamos. Si el cliente vuelve por este trabajo, registralo acá.'
+            : 'Sin reclamos sobre este trabajo.'}
+        </p>
+      ) : (
+        <ul className="mb-3 divide-y divide-concreto-200">
+          {datos.map((g) => (
+            <li key={g.id} className="py-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <p className="text-sm text-caucho-900">{g.motivo}</p>
+                <Etiqueta tono={g.estado === 'pendiente' ? 'atencion' : 'conforme'}>
+                  {g.estado === 'pendiente'
+                    ? 'Pendiente'
+                    : g.estado === 'resuelta'
+                      ? 'Resuelta'
+                      : 'Rechazada'}
+                </Etiqueta>
+              </div>
+              <p className="mt-0.5 text-xs text-acero-500">{fecha(g.creada_en)}</p>
+              {g.resolucion && (
+                <p className="mt-1 text-xs text-acero-500">Resolución: {g.resolucion}</p>
+              )}
+
+              {g.estado === 'pendiente' && resolviendo !== g.id && (
+                <Boton
+                  variante="secundario"
+                  className="mt-2 px-2 py-1"
+                  onClick={() => setResolviendo(g.id)}
+                >
+                  Resolver
+                </Boton>
+              )}
+
+              {resolviendo === g.id && (
+                <div className="mt-2 space-y-2">
+                  <Campo
+                    etiqueta="Qué se hizo"
+                    ayuda="Queda escrito: es lo que hace falta si el cliente vuelve una tercera vez."
+                  >
+                    <textarea
+                      rows={2}
+                      className={estiloInput}
+                      value={resolucion}
+                      onChange={(e) => setResolucion(e.target.value)}
+                    />
+                  </Campo>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Boton variante="secundario" onClick={() => setResolviendo(null)}>
+                      Cancelar
+                    </Boton>
+                    <Boton
+                      variante="peligro"
+                      onClick={() => cerrar(g, 'rechazada')}
+                      disabled={guardando || !resolucion.trim()}
+                    >
+                      No corresponde
+                    </Boton>
+                    <Boton
+                      onClick={() => cerrar(g, 'resuelta')}
+                      disabled={guardando || !resolucion.trim()}
+                    >
+                      Resuelta
+                    </Boton>
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {puedeRegistrar && !abiertas.length && (
+        <div className="mt-2 space-y-2">
+          <Campo etiqueta="Nuevo reclamo">
+            <input
+              className={estiloInput}
+              placeholder="Volvió el ruido en el tren delantero"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+            />
+          </Campo>
+          <div className="flex justify-end">
+            <Boton onClick={registrar} disabled={guardando || !motivo.trim()}>
+              Registrar garantía
+            </Boton>
+          </div>
+        </div>
+      )}
+
+      <Aviso>{error}</Aviso>
     </Bloque>
   )
 }

@@ -947,12 +947,15 @@ begin
     return null;
   end if;
 
-  insert into ventas (cliente_id, vendedor_id, estado, notas)
+  insert into ventas (cliente_id, vendedor_id, estado, notas, medio_pago)
   values (
     v_orden.cliente_id,
     auth.uid(),
     'cotizacion',
-    'Orden de taller · ' || v_orden.vehiculo || coalesce(' · ' || v_orden.patente, '')
+    'Orden de taller · ' || v_orden.vehiculo || coalesce(' · ' || v_orden.patente, ''),
+    -- El medio de pago viaja a la venta: es lo que después deja separar el
+    -- efectivo del cajón de lo que entró por transferencia.
+    nullif(btrim(coalesce(p_medio_pago, '')), '')
   )
   returning id into v_venta;
 
@@ -1220,6 +1223,108 @@ exception
   when undefined_object then null;
 end $rt$;
 
+-- ------------------------------------------------------------------- caja
+-- El turno de mostrador: se abre con lo que hay en el cajón y se cierra
+-- contando. Lo que importa no es el total, es la diferencia entre lo que la
+-- caja dice que debería haber y lo que efectivamente había.
+--
+-- Solo cobra sentido para el efectivo: una transferencia no está en el cajón.
+-- Por eso la venta ahora guarda con qué se pagó.
+
+alter table ventas add column if not exists medio_pago text;
+
+create table if not exists cajas (
+  id            uuid primary key default gen_random_uuid(),
+  abierta_por   uuid not null references perfiles on delete restrict,
+  abierta_en    timestamptz not null default now(),
+  monto_inicial numeric(12,2) not null default 0,
+
+  cerrada_por   uuid references perfiles on delete set null,
+  cerrada_en    timestamptz,
+  -- Lo que se contó al cerrar. El esperado no se guarda: se calcula, porque
+  -- si mañana aparece una venta con fecha del turno el número tiene que
+  -- moverse solo en vez de quedar congelado en un valor que ya no es cierto.
+  monto_contado numeric(12,2),
+  notas         text,
+
+  constraint cajas_cierre_completo check (
+    (cerrada_en is null and monto_contado is null)
+    or (cerrada_en is not null and monto_contado is not null)
+  )
+);
+
+-- Una sola caja abierta a la vez, en todo el local. El índice sobre una
+-- constante es lo que lo hace cumplir: dos filas sin cerrar chocan entre sí.
+create unique index if not exists cajas_una_abierta on cajas ((true)) where cerrada_en is null;
+
+create index if not exists cajas_abierta_idx on cajas (abierta_en desc);
+
+-- El efectivo cobrado durante un turno. Va en la base para que el cierre no
+-- dependa de que la pantalla sume bien, y filtra por `medio_pago` porque en
+-- el cajón solo está lo que se pagó en efectivo.
+create or replace function public.efectivo_de_caja(p_caja uuid)
+returns numeric language sql stable security definer set search_path = public as $fn$
+  select coalesce(sum(v.total), 0)
+    from ventas v, cajas c
+   where c.id = p_caja
+     and v.estado = 'confirmada'
+     and lower(coalesce(v.medio_pago, '')) = 'efectivo'
+     and v.creada_en >= c.abierta_en
+     and v.creada_en <= coalesce(c.cerrada_en, now());
+$fn$;
+
+revoke all on function public.efectivo_de_caja(uuid) from public;
+grant execute on function public.efectivo_de_caja(uuid) to authenticated;
+
+-- ---------------------------------------------------------- recordatorios
+-- La agenda del mostrador: llamar a alguien, avisar que llegó un repuesto,
+-- recordar un service. Son de quien los anota, no del local: la lista de
+-- pendientes de otro no le sirve a nadie más que a esa persona.
+
+create table if not exists recordatorios (
+  id         uuid primary key default gen_random_uuid(),
+  perfil_id  uuid not null references perfiles on delete cascade,
+  cliente_id uuid references clientes on delete set null,
+  tarea      text not null,
+  para       date,
+  hecho      boolean not null default false,
+  creado_en  timestamptz not null default now()
+);
+
+create index if not exists recordatorios_perfil_idx on recordatorios (perfil_id, hecho, para);
+
+-- --------------------------------------------------------------- garantías
+-- El cliente vuelve diciendo que lo que se arregló falló. Cuelga de la orden
+-- original y no del cliente: lo que se discute es *ese* trabajo, y desde la
+-- orden salen solos el vehículo, el mecánico que lo hizo y las fotos de cómo
+-- entró y cómo se entregó.
+
+do $g$ begin
+  create type estado_garantia as enum ('pendiente', 'resuelta', 'rechazada');
+exception when duplicate_object then null; end $g$;
+
+create table if not exists garantias (
+  id          uuid primary key default gen_random_uuid(),
+  orden_id    uuid not null references ordenes on delete cascade,
+  motivo      text not null,
+  estado      estado_garantia not null default 'pendiente',
+  resolucion  text,
+  creada_por  uuid references perfiles on delete set null,
+  creada_en   timestamptz not null default now(),
+  resuelta_por uuid references perfiles on delete set null,
+  resuelta_en timestamptz,
+
+  -- Cerrar una garantía sin decir cómo deja el reclamo sin respuesta escrita,
+  -- que es justo lo que hace falta si el cliente vuelve una tercera vez.
+  constraint garantias_cierre_explicado check (
+    estado = 'pendiente'
+    or nullif(btrim(coalesce(resolucion, '')), '') is not null
+  )
+);
+
+create index if not exists garantias_estado_idx on garantias (estado, creada_en desc);
+create index if not exists garantias_orden_idx on garantias (orden_id);
+
 -- ---------------------------------------------------------------- personal
 
 do $$ begin
@@ -1250,6 +1355,9 @@ alter table fichadas           enable row level security;
 alter table liquidaciones      enable row level security;
 alter table mensajes           enable row level security;
 alter table chat_lecturas      enable row level security;
+alter table cajas              enable row level security;
+alter table recordatorios      enable row level security;
+alter table garantias          enable row level security;
 alter table empresa            enable row level security;
 alter table comprobantes       enable row level security;
 alter table comprobante_items  enable row level security;
@@ -1449,6 +1557,43 @@ create policy mensajes_borrar on mensajes for delete to authenticated
 drop policy if exists chat_lecturas_propias on chat_lecturas;
 create policy chat_lecturas_propias on chat_lecturas for all to authenticated
   using (perfil_id = auth.uid()) with check (perfil_id = auth.uid());
+
+-- Caja: la abre y la cierra el mostrador, y la ve todo el mostrador porque el
+-- turno es del local y no de la persona —quien cierra a la tarde no siempre es
+-- quien abrió a la mañana. El mecánico no tiene nada que hacer acá.
+drop policy if exists cajas_leer on cajas;
+create policy cajas_leer on cajas for select to authenticated
+  using (public.mi_rol() in ('gerencia', 'vendedor'));
+
+drop policy if exists cajas_abrir on cajas;
+create policy cajas_abrir on cajas for insert to authenticated
+  with check (public.mi_rol() in ('gerencia', 'vendedor') and abierta_por = auth.uid());
+
+drop policy if exists cajas_cerrar on cajas;
+create policy cajas_cerrar on cajas for update to authenticated
+  using (public.mi_rol() in ('gerencia', 'vendedor'))
+  with check (public.mi_rol() in ('gerencia', 'vendedor'));
+
+-- Recordatorios: son de quien los anota. La lista de pendientes de otro no le
+-- sirve a nadie más, y gerencia tampoco necesita leerla.
+drop policy if exists recordatorios_propios on recordatorios;
+create policy recordatorios_propios on recordatorios for all to authenticated
+  using (perfil_id = auth.uid()) with check (perfil_id = auth.uid());
+
+-- Garantías: las carga el mostrador, que es quien recibe el reclamo, y las ve
+-- todo el equipo —el mecánico necesita saber que un trabajo suyo volvió—. Se
+-- resuelven desde el taller o desde gerencia.
+drop policy if exists garantias_leer on garantias;
+create policy garantias_leer on garantias for select to authenticated using (true);
+
+drop policy if exists garantias_crear on garantias;
+create policy garantias_crear on garantias for insert to authenticated
+  with check (public.mi_rol() in ('gerencia', 'vendedor') and creada_por = auth.uid());
+
+drop policy if exists garantias_actualizar on garantias;
+create policy garantias_actualizar on garantias for update to authenticated
+  using (public.mi_rol() in ('gerencia', 'vendedor', 'mecanico'))
+  with check (public.mi_rol() in ('gerencia', 'vendedor', 'mecanico'));
 
 -- Fichadas: cada uno ficha lo propio y no puede editarlo después.
 drop policy if exists fichadas_leer on fichadas;

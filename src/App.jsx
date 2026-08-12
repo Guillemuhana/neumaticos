@@ -11,6 +11,7 @@ import Facturacion from './pages/Facturacion'
 import Taller from './pages/Taller'
 import Personal from './pages/Personal'
 import Clientes from './pages/Clientes'
+import Caja from './pages/Caja'
 import Chat from './pages/Chat'
 import Comisiones from './pages/Comisiones'
 import Manual from './pages/Manual'
@@ -115,6 +116,15 @@ export default function App() {
                al taller aunque no ejecute el trabajo. */
             <SoloRoles roles={['gerencia', 'vendedor', 'mecanico']}>
               <Taller />
+            </SoloRoles>
+          }
+        />
+        <Route
+          path="/caja"
+          element={
+            /* El turno de mostrador. El mecánico no cobra, así que no entra. */
+            <SoloRoles roles={['gerencia', 'vendedor']}>
+              <Caja />
             </SoloRoles>
           }
         />
