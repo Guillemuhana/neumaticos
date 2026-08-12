@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react'
-import { Camera, Trash2 } from 'lucide-react'
+import { Camera, Download, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthProvider'
 import { useConsulta } from '../../hooks/useConsulta'
-import { errorDeStorage, supabase } from '../../lib/supabase'
+import { errorDeStorage, supabase, urlDescarga, urlPublica } from '../../lib/supabase'
 import { achicar } from '../../lib/imagen'
-import { fecha } from '../../lib/formato'
+import { fecha, sello } from '../../lib/formato'
 import { Aviso, Boton, Modal } from '../UI'
 
 /* El registro visual del auto: cómo entró, qué se le encontró, cómo se
@@ -26,7 +26,17 @@ const MOMENTOS = {
 const momentoSegunEstado = (estado) =>
   estado === 'pendiente' ? 'ingreso' : estado === 'entregada' ? 'entrega' : estado === 'terminada' ? 'entrega' : 'trabajo'
 
-const urlDe = (ruta) => supabase.storage.from(BUCKET).getPublicUrl(ruta).data.publicUrl
+const urlDe = (ruta) => urlPublica(BUCKET, ruta)
+
+/* El nombre con el que se guarda: la patente adelante, porque quien baja una
+   foto la está por mandar o adjuntar a algo, y ahí el UUID no sirve. */
+const nombreAlBajar = (foto, orden) =>
+  [
+    'perez',
+    (orden?.patente || orden?.vehiculo || 'vehiculo').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    foto.momento,
+    sello(foto.creada_en),
+  ].join('-') + '.jpg'
 
 export default function FotosVehiculo({ orden, editable }) {
   const { sesion, rol } = useAuth()
@@ -210,13 +220,25 @@ export default function FotosVehiculo({ orden, editable }) {
               {fecha(mirando.creada_en)}
               {nombreDe(mirando.subida_por) ? ` · ${nombreDe(mirando.subida_por)}` : ''}
             </p>
-            {/* Borrar es de gerencia, para la que salió movida. RLS lo aplica
-                igual: esconder el botón es para no ofrecer lo imposible. */}
-            {rol === 'gerencia' && (
-              <Boton variante="peligro" className="px-2 py-1" onClick={() => borrar(mirando)}>
-                <Trash2 size={14} /> Borrar
-              </Boton>
-            )}
+            <div className="flex items-center gap-2">
+              {/* Es la foto que se le manda al cliente cuando discute un daño,
+                  así que tiene que poder salir de acá. */}
+              <a
+                href={urlDescarga(BUCKET, mirando.ruta, nombreAlBajar(mirando, orden))}
+                download={nombreAlBajar(mirando, orden)}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-acero-200 bg-white px-2 py-1 text-sm font-semibold text-caucho-800 transition-colors hover:border-acero-300 hover:bg-concreto-50"
+              >
+                <Download size={14} aria-hidden="true" /> Descargar
+              </a>
+
+              {/* Borrar es de gerencia, para la que salió movida. RLS lo aplica
+                  igual: esconder el botón es para no ofrecer lo imposible. */}
+              {rol === 'gerencia' && (
+                <Boton variante="peligro" className="px-2 py-1" onClick={() => borrar(mirando)}>
+                  <Trash2 size={14} /> Borrar
+                </Boton>
+              )}
+            </div>
           </div>
         </Modal>
       )}

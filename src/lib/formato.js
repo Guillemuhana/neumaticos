@@ -22,6 +22,15 @@ export const plataExacta = (n) => monedaExacta.format(Number(n) || 0)
 
 export const numero = (n) => new Intl.NumberFormat('es-AR').format(Number(n) || 0)
 
+/* Lo que pesa un adjunto. Sin decimales hasta el mega, porque «847 kB» se lee
+   de un vistazo y «0,83 MB» hay que pensarlo. */
+export const peso = (bytes) => {
+  const n = Number(bytes) || 0
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} kB`
+  return `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
+}
+
 /* Un `date` de Postgres llega como '2026-08-03', sin hora, y `new Date` lo lee
    como medianoche UTC: en Argentina eso son las 21 del día anterior, así que
    la fecha impresa en un comprobante salía corrida un día. Las fechas sin hora
@@ -39,6 +48,11 @@ export const fechaCorta = (d) => (d ? format(aFecha(d), 'dd/MM/yy', { locale: es
 /* Para listas de un solo día —las ventas de hoy, las fichadas— donde repetir
    la fecha en cada fila no agrega nada y estorba a la lectura de la columna. */
 export const hora = (d) => (d ? format(aFecha(d), 'HH:mm', { locale: es }) : '—')
+
+/* Para el nombre de un archivo que se descarga. Sin barras —que en un nombre
+   de archivo no se pueden usar— y arrancando por el año, así la carpeta de
+   descargas queda ordenada sola. */
+export const sello = (d) => (d ? format(aFecha(d), 'yyyy-MM-dd-HHmm', { locale: es }) : 'sin-fecha')
 
 export const desde = (d) =>
   d ? formatDistanceToNow(aFecha(d), { locale: es, addSuffix: true }) : '—'

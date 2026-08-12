@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Plus, Wrench } from 'lucide-react'
+import { Car, Download, Plus, Wrench } from 'lucide-react'
 import { useConsulta } from '../../hooks/useConsulta'
-import { supabase } from '../../lib/supabase'
-import { fecha } from '../../lib/formato'
+import { supabase, urlDescarga, urlPublica } from '../../lib/supabase'
+import { fecha, sello } from '../../lib/formato'
 import { cuitFormateado } from '../../lib/fiscal'
 import { etapaDe } from '../../lib/taller'
 import { errorDeVehiculo, nombreVehiculo, patenteNormal } from '../../lib/vehiculos'
@@ -17,7 +17,16 @@ import { Aviso, Boton, Campo, Etiqueta, Modal, estiloInput } from '../UI'
    el golpe ya estaba, y hay que encontrar el ingreso donde se ve. */
 
 const BUCKET = 'vehiculos'
-const urlDe = (ruta) => supabase.storage.from(BUCKET).getPublicUrl(ruta).data.publicUrl
+const urlDe = (ruta) => urlPublica(BUCKET, ruta)
+
+const nombreAlBajar = (foto) =>
+  [
+    'perez',
+    (foto.ordenes?.patente || foto.ordenes?.vehiculo || 'vehiculo')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-'),
+    sello(foto.creada_en),
+  ].join('-') + '.jpg'
 
 export default function FichaCliente({ cliente, onCerrar, onCambio }) {
   const navigate = useNavigate()
@@ -50,7 +59,7 @@ export default function FichaCliente({ cliente, onCerrar, onCambio }) {
     () =>
       supabase
         .from('orden_fotos')
-        .select('id, ruta, momento, creada_en, ordenes!inner (id, vehiculo, cliente_id)')
+        .select('id, ruta, momento, creada_en, ordenes!inner (id, vehiculo, patente, cliente_id)')
         .eq('ordenes.cliente_id', cliente.id)
         .order('creada_en', { ascending: false })
         .limit(24),
@@ -83,7 +92,18 @@ export default function FichaCliente({ cliente, onCerrar, onCambio }) {
           ) : (
             <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {fotos.datos.map((f) => (
-                <li key={f.id}>
+                <li key={f.id} className="group relative">
+                  {/* El enlace de descarga no puede ir adentro del que abre la
+                      foto —un enlace dentro de otro no es HTML válido—, así
+                      que va encima, en la esquina. */}
+                  <a
+                    href={urlDescarga(BUCKET, f.ruta, nombreAlBajar(f))}
+                    download={nombreAlBajar(f)}
+                    aria-label={`Descargar la foto del ${fecha(f.creada_en)}`}
+                    className="absolute right-1 top-1 z-10 rounded-md bg-caucho-950/55 p-1 text-white opacity-0 transition-opacity hover:bg-caucho-950/75 focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <Download size={13} aria-hidden="true" />
+                  </a>
                   <a
                     href={urlDe(f.ruta)}
                     target="_blank"

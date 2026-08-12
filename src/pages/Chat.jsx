@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Mic, Send, Square, Trash2 } from 'lucide-react'
+import { Camera, Download, Mic, Send, Square, Trash2 } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
-import { errorDeStorage, supabase } from '../lib/supabase'
+import { errorDeStorage, supabase, urlDescarga, urlPublica } from '../lib/supabase'
 import { achicar } from '../lib/imagen'
-import { hora, fechaCorta } from '../lib/formato'
+import { hora, fechaCorta, sello } from '../lib/formato'
 import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Tarjeta, Vacio, estiloInput } from '../components/UI'
 
 /* El canal del equipo. Uno solo y grupal: en un taller de seis personas los
@@ -14,7 +14,16 @@ import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Tarjeta, Vacio, estiloInp
    celular del taller, sondear es batería y datos gastados en escuchar "no". */
 
 const BUCKET = 'chat'
-const urlDe = (ruta) => supabase.storage.from(BUCKET).getPublicUrl(ruta).data.publicUrl
+const urlDe = (ruta) => urlPublica(BUCKET, ruta)
+
+/* Los archivos se suben con un UUID por nombre, que en la carpeta de
+   descargas no le dice nada a nadie. Al bajarlos se rebautizan con qué son y
+   de cuándo son: si mañana hay que mandarle al cliente la foto que pasó el
+   mecánico, se encuentra buscando por fecha. */
+const nombreAlBajar = (mensaje) => {
+  const extension = mensaje.adjunto_ruta.split('.').pop() || 'dat'
+  return `perez-${mensaje.adjunto_tipo}-${sello(mensaje.creado_en)}.${extension}`
+}
 
 const TONO_ROL = { gerencia: 'marca', vendedor: 'conforme', mecanico: 'atencion' }
 const NOMBRE_ROL = { gerencia: 'Gerencia', vendedor: 'Vendedor', mecanico: 'Mecánico' }
@@ -196,6 +205,20 @@ function Burbuja({ mensaje, autor, propio, nuevoDia, onBorrado, onError }) {
           {mensaje.adjunto_tipo === 'audio' && (
             // eslint-disable-next-line jsx-a11y/media-has-caption
             <audio controls src={urlDe(mensaje.adjunto_ruta)} className="mt-1.5 w-full max-w-xs" />
+          )}
+
+          {/* Bajar el archivo, que es lo que hace falta cuando la foto hay que
+              reenviársela al cliente o guardarla junto al presupuesto. Tocar
+              la imagen la abre para mirarla; esto la guarda. */}
+          {mensaje.adjunto_ruta && (
+            <a
+              href={urlDescarga(BUCKET, mensaje.adjunto_ruta, nombreAlBajar(mensaje))}
+              download={nombreAlBajar(mensaje)}
+              className="mt-1.5 inline-flex items-center gap-1 rounded px-1 py-0.5 text-micro font-medium text-acero-500 transition-colors hover:bg-white hover:text-caucho-950"
+            >
+              <Download size={12} aria-hidden="true" />
+              Descargar
+            </a>
           )}
         </div>
       </li>
