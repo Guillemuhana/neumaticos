@@ -26,7 +26,9 @@ export default function Taller() {
      cliente, con el paso 1 completo. */
   const [creando, setCreando] = useState(Boolean(ubicacion.state?.nueva))
   const clienteInicial = ubicacion.state?.cliente ?? null
-  const [abiertaId, setAbiertaId] = useState(null)
+  /* Y desde una cotización aprobada se entra directo a la orden que acaba de
+     abrirse: el vendedor la mandó al taller y quiere ver que llegó. */
+  const [abiertaId, setAbiertaId] = useState(ubicacion.state?.orden ?? null)
   const [verHistorial, setVerHistorial] = useState(false)
 
   /* La orden apunta dos veces a `perfiles` (quién la recibió y quién la

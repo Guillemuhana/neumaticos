@@ -1014,6 +1014,153 @@ end $$;
 revoke all on function public.entregar_orden(uuid, text, date) from public;
 grant execute on function public.entregar_orden(uuid, text, date) to authenticated;
 
+-- ------------------------------------------ de la cotización a la orden
+-- El otro camino de entrada al taller. Hasta acá la orden siempre nacía en el
+-- mostrador con el auto ya adentro: sirve para el que llega con un ruido raro,
+-- pero no para el que pide presupuesto por un service y vuelve el jueves.
+--
+-- Ahí la cotización es lo primero que existe, y el auto es parte de lo que se
+-- cotiza: cuatro cubiertas para una Ranger no son las mismas que para un Corsa.
+-- Por eso el vehículo cuelga de la venta y no solo de la orden.
+alter table ventas add column if not exists vehiculo_id uuid references vehiculos on delete set null;
+
+-- Cuándo dijo que sí, y quién lo escuchó. Es lo único que sirve cuando el
+-- cliente discute un importe que aprobó por teléfono hace dos semanas.
+alter table ventas add column if not exists aprobada_en  timestamptz;
+alter table ventas add column if not exists aprobada_por uuid references perfiles on delete set null;
+
+-- La cotización de la que salió la orden. No confundir con `venta_id`, que va
+-- en el otro sentido: esa es la venta que la orden *deja* al entregar el auto.
+-- Una orden puede tener las dos, y son documentos distintos.
+alter table ordenes add column if not exists cotizacion_id uuid references ventas on delete set null;
+
+create index if not exists ventas_vehiculo_idx on ventas (vehiculo_id);
+create index if not exists ordenes_cotizacion_idx on ordenes (cotizacion_id);
+
+-- Una cotización aprobada se cobra al entregar el vehículo, no en el mostrador:
+-- el auto todavía no se tocó y el plan de trabajo puede cambiar. Confirmarla
+-- acá descontaría el stock dos veces —una ahora y otra al entregar— y dejaría
+-- dos ventas por el mismo trabajo en las estadísticas.
+create or replace function public.trabar_cotizacion_en_taller()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if old.aprobada_en is not null and new.estado is distinct from old.estado then
+    raise exception 'Esa cotización ya pasó al taller: se cobra al entregar el vehículo.';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_cotizacion_en_taller on ventas;
+create trigger trg_cotizacion_en_taller
+  before update on ventas
+  for each row execute function public.trabar_cotizacion_en_taller();
+
+-- El cliente aprobó: el auto entra al taller con el trabajo ya acordado.
+--
+-- Va en una función por lo mismo que `entregar_orden`: son cuatro escrituras
+-- —la orden, sus renglones, el sello de aprobación— que o pasan juntas o no
+-- pasa ninguna. Hacerlas desde el navegador deja órdenes sin plan de trabajo
+-- cuando se corta la conexión a la mitad, que es el peor de los estados: el
+-- auto en el elevador y nadie sabe qué se acordó cobrar.
+create or replace function public.aprobar_cotizacion(
+  p_venta       uuid,
+  p_mecanico    uuid    default null,
+  p_kilometraje integer default null,
+  p_falla       text    default null,
+  p_notas       text    default null
+)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_venta    ventas;
+  v_vehiculo vehiculos;
+  v_orden    uuid;
+begin
+  -- Security definer: acá no hay RLS que ataje nada, así que el rol se
+  -- comprueba a mano y un rol NULL no alcanza para pasar.
+  if coalesce(public.mi_rol() in ('gerencia', 'vendedor'), false) is not true then
+    raise exception 'Solo el mostrador aprueba una cotización.';
+  end if;
+
+  select * into v_venta from ventas where id = p_venta for update;
+  if not found then
+    raise exception 'La cotización no existe.';
+  end if;
+
+  -- Reintento tras un corte: ya se aprobó, devolvemos la orden que salió.
+  select id into v_orden from ordenes where cotizacion_id = p_venta limit 1;
+  if v_orden is not null then return v_orden; end if;
+
+  if v_venta.estado <> 'cotizacion' then
+    raise exception 'Solo se aprueba una cotización que siga abierta.';
+  end if;
+
+  if v_venta.cliente_id is null then
+    raise exception 'Una cotización sin cliente no puede pasar al taller: el auto es de alguien.';
+  end if;
+
+  if v_venta.vehiculo_id is null then
+    raise exception 'Elegí el vehículo en la cotización antes de mandarla al taller.';
+  end if;
+
+  select * into v_vehiculo from vehiculos where id = v_venta.vehiculo_id;
+  if not found then
+    raise exception 'El vehículo de la cotización ya no existe.';
+  end if;
+
+  if p_mecanico is not null
+     and not exists (select 1 from perfiles where id = p_mecanico and rol = 'mecanico') then
+    raise exception 'El mecánico asignado no existe o ya no trabaja en el taller.';
+  end if;
+
+  insert into ordenes (
+    cliente_id, vehiculo_id, vehiculo, patente, recepcionista_id, mecanico_id,
+    kilometraje, falla_reportada, notas, estado, cotizacion_id
+  )
+  values (
+    v_venta.cliente_id,
+    v_vehiculo.id,
+    -- El texto del auto se congela igual que en el alta manual: es cómo entró
+    -- ese día, aunque mañana se corrija la patente en la ficha del cliente.
+    concat_ws(' ', v_vehiculo.marca, v_vehiculo.modelo, v_vehiculo.anio),
+    v_vehiculo.patente,
+    auth.uid(),
+    p_mecanico,
+    p_kilometraje,
+    coalesce(nullif(btrim(p_falla), ''), v_venta.notas),
+    nullif(btrim(p_notas), ''),
+    'pendiente',
+    p_venta
+  )
+  returning id into v_orden;
+
+  /* Los renglones de la cotización pasan a ser el plan de trabajo. Un renglón
+     con producto es un repuesto y se va a descontar del stock al entregar; sin
+     producto es mano de obra. La media hora de alineación es el caso que
+     obliga a mirar la cantidad: `orden_items` solo admite repuestos en
+     unidades enteras, así que un producto en cantidad fraccionada entra como
+     servicio en vez de romper el alta entera. */
+  insert into orden_items (orden_id, tipo, producto_id, descripcion, cantidad, precio_unitario)
+  select
+    v_orden,
+    case when i.producto_id is not null and i.cantidad = trunc(i.cantidad)
+         then 'repuesto'::tipo_item_orden else 'servicio'::tipo_item_orden end,
+    case when i.producto_id is not null and i.cantidad = trunc(i.cantidad)
+         then i.producto_id end,
+    coalesce(nullif(btrim(i.descripcion), ''), concat_ws(' ', p.marca, p.medida), 'Ítem'),
+    i.cantidad,
+    i.precio_unitario
+  from venta_items i
+  left join productos p on p.id = i.producto_id
+  where i.venta_id = p_venta;
+
+  update ventas set aprobada_en = now(), aprobada_por = auth.uid() where id = p_venta;
+
+  return v_orden;
+end $$;
+
+revoke all on function public.aprobar_cotizacion(uuid, uuid, integer, text, text) from public;
+grant execute on function public.aprobar_cotizacion(uuid, uuid, integer, text, text) to authenticated;
+
 -- ------------------------------------------------------------- comisiones
 -- El vendedor cobra un porcentaje de lo que vendió; el mecánico, de la mano de
 -- obra que trabajó. Los repuestos no entran en la comisión del taller: el

@@ -876,6 +876,15 @@ function Trazabilidad({ orden }) {
         ))}
       </ul>
 
+      {/* De dónde salió el trabajo. Una orden que nació de una cotización ya
+          tenía el precio acordado con el cliente antes de que el auto entrara:
+          si después se discute un importe, eso es lo primero que se mira. */}
+      {orden.cotizacion_id && (
+        <p className="mt-2 border-t border-concreto-200 pt-2 text-xs text-acero-500">
+          El plan de trabajo salió de una cotización que el cliente aprobó.
+        </p>
+      )}
+
       {/* Lo que se definió al entregar. Va acá y no en un bloque propio porque
           es parte de cómo terminó esta orden, no algo que se pueda editar. */}
       {(orden.medio_pago || orden.proximo_service) && (
