@@ -14,6 +14,7 @@ import {
   puedeEditarPlan,
   puedeEditarRecepcion,
   puedeEditarTrabajo,
+  puedeVerMontos,
 } from '../../lib/taller'
 import FotosVehiculo from './FotosVehiculo'
 import { Aviso, Boton, Campo, Cargando, Etiqueta, Modal, estiloInput } from '../UI'
@@ -143,6 +144,7 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
           items={items}
           total={total}
           editable={editaPlan}
+          montos={puedeVerMontos(rol)}
           onCambio={refrescar}
         />
 
@@ -530,7 +532,10 @@ function Entrega({ orden, trabajando, onCancelar, onConfirmar }) {
   )
 }
 
-function Plan({ orden, items, total, editable, onCambio }) {
+/* Para el mostrador es lo que se va a cobrar; para el mecánico es la lista de
+   lo que hay que hacerle al auto. Es el mismo bloque sin los importes: qué y
+   cuánto, sin a cuánto. */
+function Plan({ orden, items, total, editable, montos, onCambio }) {
   const [agregando, setAgregando] = useState(false)
   const [error, setError] = useState('')
 
@@ -574,15 +579,30 @@ function Plan({ orden, items, total, editable, onCambio }) {
                     <p className="text-sm font-medium text-caucho-900">{i.descripcion}</p>
                     <p className="text-xs text-acero-500">
                       {i.tipo === 'repuesto' ? 'Repuesto' : 'Mano de obra'} ·{' '}
-                      {numero(i.cantidad)} × {plata(i.precio_unitario)}
+                      {/* Sin importes, la cantidad sola no dice nada: se
+                          nombra en la unidad con la que se cargó, horas para
+                          la mano de obra y unidades para el repuesto. */}
+                      {montos
+                        ? `${numero(i.cantidad)} × ${plata(i.precio_unitario)}`
+                        : `${numero(i.cantidad)} ${
+                            i.tipo === 'repuesto'
+                              ? Number(i.cantidad) === 1
+                                ? 'unidad'
+                                : 'unidades'
+                              : Number(i.cantidad) === 1
+                                ? 'hora'
+                                : 'horas'
+                          }`}
                       {i.tipo === 'repuesto' && i.productos && i.productos.stock < i.cantidad && (
                         <span className="text-atencion-700"> · stock insuficiente ({i.productos.stock})</span>
                       )}
                     </p>
                   </div>
-                  <p className="shrink-0 font-mono text-sm font-semibold">
-                    {plata(Number(i.cantidad) * Number(i.precio_unitario))}
-                  </p>
+                  {montos && (
+                    <p className="shrink-0 font-mono text-sm font-semibold">
+                      {plata(Number(i.cantidad) * Number(i.precio_unitario))}
+                    </p>
+                  )}
                   {editable && (
                     <button
                       onClick={() => borrar(i)}
@@ -597,10 +617,12 @@ function Plan({ orden, items, total, editable, onCambio }) {
             </ul>
           )}
 
-          <div className="mt-2 flex items-center justify-between border-t border-concreto-200 pt-2">
-            <span className="text-sm font-semibold text-caucho-800">Total</span>
-            <span className="display text-base font-bold">{plata(total)}</span>
-          </div>
+          {montos && (
+            <div className="mt-2 flex items-center justify-between border-t border-concreto-200 pt-2">
+              <span className="text-sm font-semibold text-caucho-800">Total</span>
+              <span className="display text-base font-bold">{plata(total)}</span>
+            </div>
+          )}
 
           <Aviso>{error}</Aviso>
 
@@ -1095,10 +1117,10 @@ function Hallazgos({ orden, rol }) {
   const responde = ['gerencia', 'vendedor'].includes(rol) && orden.estado !== 'entregada'
 
   /* El precio no es asunto del mecánico: él dice qué encontró, la lista la
-     valúa el mostrador. Poner un importe en el taller es arriesgarse a que el
-     cliente escuche por teléfono un número que después no cierra con lo que se
-     cobra, y el que queda en falta es el que atendió. */
-  const cotiza = rol === 'gerencia'
+     valúa el mostrador. Ni lo carga ni lo ve —un número que se le escapa por
+     teléfono y después no cierra con lo que se cobra deja en falta al que
+     atendió. */
+  const montos = puedeVerMontos(rol)
 
   const informar = async () => {
     setGuardando(true)
@@ -1161,7 +1183,7 @@ function Hallazgos({ orden, rol }) {
               </div>
               <p className="mt-0.5 text-xs text-acero-500">
                 {fecha(h.informado_en)}
-                {h.estimado != null && ` · estimado ${plata(h.estimado)}`}
+                {montos && h.estimado != null && ` · estimado ${plata(h.estimado)}`}
               </p>
 
               {h.estado === 'informado' && responde && (
@@ -1199,7 +1221,7 @@ function Hallazgos({ orden, rol }) {
           <Campo
             etiqueta="Nuevo hallazgo"
             ayuda={
-              cotiza
+              montos
                 ? 'Requiere aprobación del cliente: el mostrador lo llama y responde acá.'
                 : 'Escribí qué encontrás y por qué conviene hacerlo. El precio lo pone el mostrador, que es quien llama al cliente.'
             }
@@ -1212,9 +1234,9 @@ function Hallazgos({ orden, rol }) {
             />
           </Campo>
           <div
-            className={`flex flex-wrap items-end gap-2 ${cotiza ? 'justify-between' : 'justify-end'}`}
+            className={`flex flex-wrap items-end gap-2 ${montos ? 'justify-between' : 'justify-end'}`}
           >
-            {cotiza && (
+            {montos && (
               <Campo etiqueta="Estimado (opcional)">
                 <input
                   type="number"

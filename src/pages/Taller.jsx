@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
 import { desde, plata } from '../lib/formato'
-import { ETAPAS_ACTIVAS, avanceDe, etapaDe } from '../lib/taller'
+import { ETAPAS_ACTIVAS, avanceDe, etapaDe, puedeVerMontos } from '../lib/taller'
 import PanelOrden from '../components/taller/PanelOrden'
 import NuevaOrden from '../components/taller/NuevaOrden'
 import { Aviso, Boton, Cargando, Encabezado, Etiqueta, Tarjeta, Vacio } from '../components/UI'
@@ -198,6 +198,10 @@ export default function Taller() {
 
 function TarjetaOrden({ orden, destacar, mia = false, onAbrir }) {
   const etapa = etapaDe(orden.estado)
+  /* El rol se lee acá y no baja por props: la tarjeta se dibuja en el tablero
+     y en el historial, y ninguno de los dos tiene por qué saber de plata. */
+  const { rol } = useAuth()
+  const montos = puedeVerMontos(rol)
 
   return (
     <Tarjeta
@@ -243,12 +247,16 @@ function TarjetaOrden({ orden, destacar, mia = false, onAbrir }) {
         <p className="mt-1.5 line-clamp-2 text-xs text-acero-500">{orden.falla_reportada}</p>
       )}
 
-      <div className="mt-2.5 flex items-center justify-between gap-2">
-        {Number(orden.total) > 0 ? (
-          <span className="font-mono text-sm font-semibold">{plata(orden.total)}</span>
-        ) : (
-          <Etiqueta tono={etapa.tono}>Sin valorizar</Etiqueta>
-        )}
+      {/* Al mecánico no le queda ni el importe ni el «Sin valorizar»: las dos
+          cosas son plata, y valorizar la orden no es tarea suya. Le queda la
+          antigüedad, que sí le dice si el auto se está durmiendo. */}
+      <div className={`mt-2.5 flex items-center gap-2 ${montos ? 'justify-between' : 'justify-end'}`}>
+        {montos &&
+          (Number(orden.total) > 0 ? (
+            <span className="font-mono text-sm font-semibold">{plata(orden.total)}</span>
+          ) : (
+            <Etiqueta tono={etapa.tono}>Sin valorizar</Etiqueta>
+          ))}
         <span className="text-xs text-acero-500">{desde(orden.creada_en)}</span>
       </div>
 

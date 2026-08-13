@@ -60,3 +60,9 @@ export const puedeEditarPlan = (orden, rol) =>
 
 export const puedeEditarRecepcion = (orden, rol) =>
   ['gerencia', 'vendedor'].includes(rol) && orden.estado !== 'entregada'
+
+/* El taller no maneja plata. El mecánico dice qué hay que hacer y qué encontró;
+   cuánto sale lo pone el mostrador, que es quien habla con el cliente.
+   Mostrarle importes que ni siquiera puede tocar no le sirve para trabajar y
+   sí para que un número se le escape en el mostrador antes de tiempo. */
+export const puedeVerMontos = (rol) => ['gerencia', 'vendedor'].includes(rol)
