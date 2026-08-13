@@ -1094,6 +1094,12 @@ function Hallazgos({ orden, rol }) {
   const informa = ['gerencia', 'mecanico'].includes(rol) && orden.estado !== 'entregada'
   const responde = ['gerencia', 'vendedor'].includes(rol) && orden.estado !== 'entregada'
 
+  /* El precio no es asunto del mecánico: él dice qué encontró, la lista la
+     valúa el mostrador. Poner un importe en el taller es arriesgarse a que el
+     cliente escuche por teléfono un número que después no cierra con lo que se
+     cobra, y el que queda en falta es el que atendió. */
+  const cotiza = rol === 'gerencia'
+
   const informar = async () => {
     setGuardando(true)
     setError('')
@@ -1192,7 +1198,11 @@ function Hallazgos({ orden, rol }) {
         <div className="mt-2 space-y-2">
           <Campo
             etiqueta="Nuevo hallazgo"
-            ayuda="Requiere aprobación del cliente: el mostrador lo llama y responde acá."
+            ayuda={
+              cotiza
+                ? 'Requiere aprobación del cliente: el mostrador lo llama y responde acá.'
+                : 'Escribí qué encontrás y por qué conviene hacerlo. El precio lo pone el mostrador, que es quien llama al cliente.'
+            }
           >
             <input
               className={estiloInput}
@@ -1201,16 +1211,20 @@ function Hallazgos({ orden, rol }) {
               onChange={(e) => setDescripcion(e.target.value)}
             />
           </Campo>
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <Campo etiqueta="Estimado (opcional)">
-              <input
-                type="number"
-                min="0"
-                className={`${estiloInput} w-40`}
-                value={estimado}
-                onChange={(e) => setEstimado(e.target.value)}
-              />
-            </Campo>
+          <div
+            className={`flex flex-wrap items-end gap-2 ${cotiza ? 'justify-between' : 'justify-end'}`}
+          >
+            {cotiza && (
+              <Campo etiqueta="Estimado (opcional)">
+                <input
+                  type="number"
+                  min="0"
+                  className={`${estiloInput} w-40`}
+                  value={estimado}
+                  onChange={(e) => setEstimado(e.target.value)}
+                />
+              </Campo>
+            )}
             <Boton onClick={informar} disabled={guardando || !descripcion.trim()}>
               Informar hallazgo
             </Boton>

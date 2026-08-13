@@ -2,8 +2,8 @@ import { useRef, useState } from 'react'
 import { Camera, Download, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthProvider'
 import { useConsulta } from '../../hooks/useConsulta'
-import { errorDeStorage, supabase, urlDescarga, urlPublica } from '../../lib/supabase'
-import { achicar } from '../../lib/imagen'
+import { supabase, urlDescarga, urlPublica } from '../../lib/supabase'
+import { BUCKET, MOMENTOS, momentoSegunEstado, subirFotoDeOrden } from '../../lib/fotos'
 import { fecha, sello } from '../../lib/formato'
 import { Aviso, Boton, Modal } from '../UI'
 
@@ -11,20 +11,8 @@ import { Aviso, Boton, Modal } from '../UI'
    entregó. Es la prueba que se mira cuando el cliente vuelve diciendo que el
    rayón no estaba, así que la foto lleva siempre quién la sacó y cuándo.
 
-   El momento no se elige: lo dice el estado de la orden. Quien tiene el auto
-   delante y el celular en la mano no debería tener que clasificar nada, y el
-   90% de las veces la respuesta correcta es la obvia. */
-
-const BUCKET = 'vehiculos'
-
-const MOMENTOS = {
-  ingreso: 'Cómo entró',
-  trabajo: 'Durante el trabajo',
-  entrega: 'Cómo se entregó',
-}
-
-const momentoSegunEstado = (estado) =>
-  estado === 'pendiente' ? 'ingreso' : estado === 'entregada' ? 'entrega' : estado === 'terminada' ? 'entrega' : 'trabajo'
+   La subida en sí vive en lib/fotos: el mostrador saca estas mismas fotos al
+   recibir el auto, y son la misma fila en la misma tabla. */
 
 const urlDe = (ruta) => urlPublica(BUCKET, ruta)
 
@@ -78,37 +66,24 @@ export default function FotosVehiculo({ orden, editable }) {
        seis subidas simultáneas en el wifi del taller terminan más lento que
        en fila —además de dejar a medias las que fallan. */
     for (const archivo of archivos) {
-      try {
-        const liviana = await achicar(archivo)
-        const ruta = `${orden.id}/${crypto.randomUUID()}.jpg`
+      const { error: fallo } = await subirFotoDeOrden({
+        ordenId: orden.id,
+        archivo,
+        momento,
+        subidaPor: sesion.user.id,
+      })
 
-        const { error: errorSubida } = await supabase.storage
-          .from(BUCKET)
-          .upload(ruta, liviana, { cacheControl: '3600', contentType: liviana.type })
+      setSubiendo((n) => n - 1)
 
-        if (errorSubida) throw errorDeStorage(errorSubida, BUCKET)
-
-        const { error: errorFila } = await supabase.from('orden_fotos').insert({
-          orden_id: orden.id,
-          momento,
-          ruta,
-          subida_por: sesion.user.id,
-        })
-
-        /* Si la fila no entra, el archivo queda huérfano en el bucket: se
-           borra acá para que no se acumule basura que nadie va a mirar. */
-        if (errorFila) {
-          await supabase.storage.from(BUCKET).remove([ruta])
-          throw errorFila
-        }
-      } catch (e) {
-        setError(e.message ?? 'No se pudo subir la foto.')
+      if (fallo) {
+        setError(fallo)
         break
-      } finally {
-        setSubiendo((n) => n - 1)
       }
     }
 
+    /* En cero y no restando: si una falló y se cortó la fila, las que quedaban
+       nunca descuentan y el botón queda deshabilitado para siempre. */
+    setSubiendo(0)
     recargar()
   }
 

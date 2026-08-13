@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { domAnimation, LazyMotion, m, useReducedMotion } from 'motion/react'
-import { Check, FileText, Plus, Receipt, Search, Trash2, Wrench, X } from 'lucide-react'
+import { Camera, Check, FileText, Plus, Receipt, Search, Trash2, Wrench, X } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
+import { subirFotoDeOrden } from '../lib/fotos'
 import { fecha, numero, plata } from '../lib/formato'
 import { estadoDe } from '../lib/fiscal'
 import { nombreVehiculo } from '../lib/vehiculos'
@@ -50,6 +51,7 @@ const FILTROS = [
 
 export default function Ventas() {
   const navigate = useNavigate()
+  const { sesion } = useAuth()
   const [creando, setCreando] = useState(false)
   const [confirmando, setConfirmando] = useState(null)
   const [aprobando, setAprobando] = useState(null)
@@ -139,8 +141,12 @@ export default function Ventas() {
 
   /* Aprobar es mandar el auto al taller con el trabajo ya acordado. La base
      hace la orden, le copia los renglones y sella quién aprobó, todo junto;
-     acá solo queda llevar al usuario a la orden recién abierta. */
-  const aprobar = async (datosDelTaller) => {
+     acá solo queda subir las fotos de cómo entró y llevar al usuario a la
+     orden recién abierta.
+
+     Las fotos van después y no antes porque cuelgan de la orden, y la orden
+     no existe hasta que la RPC responde. */
+  const aprobar = async (datosDelTaller, fotos) => {
     setAviso('')
     const { data, error } = await supabase.rpc('aprobar_cotizacion', {
       p_venta: aprobando.id,
@@ -150,8 +156,41 @@ export default function Ventas() {
       p_notas: datosDelTaller.notas || null,
     })
 
+    if (error) {
+      setAprobando(null)
+      return setAviso(error.message)
+    }
+
+    /* De a una y no en paralelo: son fotos de varios MB desde un celular, y
+       seis subidas simultáneas en el wifi del taller terminan más lento que en
+       fila —además de dejar a medias las que fallan. */
+    let falloFoto = ''
+    for (const archivo of fotos) {
+      const { error: fallo } = await subirFotoDeOrden({
+        ordenId: data,
+        archivo,
+        momento: 'ingreso',
+        subidaPor: sesion.user.id,
+      })
+      if (fallo) {
+        falloFoto = fallo
+        break
+      }
+    }
+
     setAprobando(null)
-    if (error) return setAviso(error.message)
+
+    /* Si las fotos fallaron no se navega: el aviso se perdería en el camino y
+       el vendedor se iría creyendo que el auto quedó documentado. La orden ya
+       está abierta —eso hay que decirlo— y desde la fila se llega a ella para
+       sacarlas de nuevo. */
+    if (falloFoto) {
+      recargar()
+      return setAviso(
+        `La orden se abrió, pero las fotos no subieron: ${falloFoto} Entrá con «Ver la orden» y sacálas de nuevo.`
+      )
+    }
+
     navigate('/taller', { state: { orden: data } })
   }
 
@@ -706,7 +745,8 @@ function NuevaVenta({ onCerrar, onGuardada }) {
 
 /* El cliente dijo que sí. Lo que falta para que el auto entre al taller es lo
    mismo que se pregunta en la recepción, porque esto *es* la recepción: en
-   qué kilometraje viene, qué dijo que le pasa y quién lo va a atender.
+   qué kilometraje viene, qué dijo que le pasa, quién lo va a atender y cómo
+   entró.
 
    El mecánico se puede dejar sin asignar —a veces el auto se deja y recién a
    la tarde se sabe quién lo agarra—, pero el trabajo no arranca sin él. */
@@ -717,6 +757,8 @@ function AprobarCotizacion({ venta, onCerrar, onAprobar }) {
     falla_reportada: '',
     notas: '',
   })
+  const [fotos, setFotos] = useState([])
+  const entrada = useRef(null)
   const [guardando, setGuardando] = useState(false)
 
   const { datos: mecanicos } = useConsulta(
@@ -734,6 +776,30 @@ function AprobarCotizacion({ venta, onCerrar, onAprobar }) {
     value: form[k],
     onChange: (e) => setForm({ ...form, [k]: e.target.value }),
   })
+
+  /* Las miniaturas se miran desde la memoria del navegador: la foto todavía no
+     subió a ningún lado —la orden no existe— y no tiene sentido subirla para
+     poder verla si el vendedor puede cancelar. El ref es para poder soltar
+     esas URLs al cerrar sin que el efecto se lleve puestas las vigentes. */
+  const vivas = useRef(fotos)
+  vivas.current = fotos
+  useEffect(() => () => vivas.current.forEach((f) => URL.revokeObjectURL(f.vista)), [])
+
+  const elegir = (evento) => {
+    const nuevas = Array.from(evento.target.files ?? [])
+    /* El input se limpia ya: sin esto, sacar dos veces la misma foto no
+       dispara el change y la segunda no entra. */
+    evento.target.value = ''
+    setFotos((prev) => [
+      ...prev,
+      ...nuevas.map((archivo) => ({ archivo, vista: URL.createObjectURL(archivo) })),
+    ])
+  }
+
+  const quitar = (foto) => {
+    URL.revokeObjectURL(foto.vista)
+    setFotos((prev) => prev.filter((f) => f !== foto))
+  }
 
   return (
     <Modal titulo="Aprobar y enviar al taller" onCerrar={onCerrar}>
@@ -770,6 +836,57 @@ function AprobarCotizacion({ venta, onCerrar, onAprobar }) {
           <input className={estiloInput} placeholder="Entrega llave de rueda" {...campo('notas')} />
         </Campo>
 
+        {/* Cómo entró el auto, con el cliente todavía enfrente. Es la única
+            ocasión: después el auto está adentro y el rayón ya no se puede
+            fechar. Van al mismo lugar que las del taller —la orden que se
+            abre acá— así que el mecánico las ve al levantar la ficha. */}
+        <Campo
+          etiqueta="Fotos de cómo entra"
+          ayuda="Sacale unas vueltas antes de que entre. Es lo que resuelve la discusión si después aparece un daño."
+        >
+          <input
+            ref={entrada}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            onChange={elegir}
+            className="hidden"
+          />
+
+          {fotos.length > 0 && (
+            <ul className="mb-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {fotos.map((foto) => (
+                <li key={foto.vista} className="relative">
+                  <img
+                    src={foto.vista}
+                    alt=""
+                    className="aspect-square w-full rounded-lg border border-concreto-200 object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => quitar(foto)}
+                    disabled={guardando}
+                    aria-label="Quitar foto"
+                    className="absolute -right-1.5 -top-1.5 rounded-full border border-concreto-200 bg-white p-1 text-acero-500 shadow-sm transition-colors hover:text-atencion-600"
+                  >
+                    <X size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <Boton
+            type="button"
+            variante="secundario"
+            onClick={() => entrada.current?.click()}
+            disabled={guardando}
+          >
+            <Camera size={15} /> {fotos.length ? 'Sacar otra' : 'Sacar fotos'}
+          </Boton>
+        </Campo>
+
         <p className="text-xs text-acero-500">
           Se abre la orden con los ítems de la cotización ya cargados como plan de trabajo. El
           stock y el cobro se mueven al entregar el vehículo, no ahora.
@@ -782,11 +899,18 @@ function AprobarCotizacion({ venta, onCerrar, onAprobar }) {
           <Boton
             onClick={() => {
               setGuardando(true)
-              onAprobar(form)
+              onAprobar(
+                form,
+                fotos.map((f) => f.archivo)
+              )
             }}
             disabled={guardando}
           >
-            {guardando ? 'Abriendo la orden…' : 'Aprobar y enviar al taller'}
+            {guardando
+              ? fotos.length
+                ? 'Subiendo las fotos…'
+                : 'Abriendo la orden…'
+              : 'Aprobar y enviar al taller'}
           </Boton>
         </div>
       </div>
