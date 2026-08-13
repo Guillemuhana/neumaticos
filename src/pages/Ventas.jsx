@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, FileText, Plus, Receipt, Trash2, Wrench } from 'lucide-react'
+import { domAnimation, LazyMotion, m, useReducedMotion } from 'motion/react'
+import { Check, FileText, Plus, Receipt, Search, Trash2, Wrench, X } from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
 import { supabase } from '../lib/supabase'
-import { fecha, plata } from '../lib/formato'
+import { fecha, numero, plata } from '../lib/formato'
 import { estadoDe } from '../lib/fiscal'
 import { nombreVehiculo } from '../lib/vehiculos'
 import BuscadorCliente from '../components/clientes/BuscadorCliente'
@@ -13,8 +14,8 @@ import {
   Aviso,
   Boton,
   Campo,
-  Cargando,
   Encabezado,
+  Esqueleto,
   Etiqueta,
   Modal,
   Tabla,
@@ -26,12 +27,36 @@ import {
 const tonoEstado = { cotizacion: 'neutro', confirmada: 'conforme', anulada: 'atencion' }
 const textoEstado = { cotizacion: 'Cotización', confirmada: 'Confirmada', anulada: 'Anulada' }
 
+/* La venta no tiene un solo estado, tiene dos que se leen juntos: el de la
+   tabla y el de si el auto ya está en el taller. Se resuelve una vez acá y no
+   en cada lugar que necesita saberlo. */
+const etapaDe = (v) => (v.aprobada_en ? 'taller' : v.estado)
+
+/* La misma curva del resto del sistema. El movimiento acá es mucho más
+   contenido que en el login: esta es una pantalla de trabajo, y lo único que
+   se anima es la entrada de las filas, para que al filtrar se vea que la
+   lista se rehízo y no que parpadeó. */
+const SUAVE = [0.22, 1, 0.36, 1]
+
+/* Los filtros son las cuatro respuestas a «qué estoy buscando», en el orden en
+   que una venta las atraviesa. `todas` primero porque es donde se cae al
+   entrar. */
+const FILTROS = [
+  { valor: 'todas', texto: 'Todas' },
+  { valor: 'cotizacion', texto: 'Cotizaciones' },
+  { valor: 'taller', texto: 'En el taller' },
+  { valor: 'confirmada', texto: 'Confirmadas' },
+]
+
 export default function Ventas() {
   const navigate = useNavigate()
   const [creando, setCreando] = useState(false)
   const [confirmando, setConfirmando] = useState(null)
   const [aprobando, setAprobando] = useState(null)
   const [aviso, setAviso] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+  const [filtro, setFiltro] = useState('todas')
+  const quieto = useReducedMotion()
 
   /* Los comprobantes vienen aparte y se cruzan acá: la venta y el comprobante
      no comparten tabla, y `comprobantes` la lee solo administración. Las
@@ -68,6 +93,49 @@ export default function Ventas() {
       })),
     }
   }, [])
+
+  const ventas = datos ?? []
+
+  /* Buscar por lo que uno tiene a mano cuando busca una venta: el nombre que
+     dijo el cliente por teléfono, o la patente que le leyó al auto. */
+  const porTexto = useMemo(() => {
+    const q = busqueda.trim().toLowerCase()
+    if (!q) return ventas
+    return ventas.filter((v) =>
+      [v.clientes?.nombre, v.perfiles?.nombre, nombreVehiculo(v.vehiculos), v.vehiculos?.patente, v.notas]
+        .filter(Boolean)
+        .some((campo) => campo.toLowerCase().includes(q))
+    )
+  }, [ventas, busqueda])
+
+  /* Los conteos salen de lo que ya filtró el texto, no del total: si prometen
+     doce cotizaciones y el buscador dejó dos, el número miente. */
+  const conteos = useMemo(() => {
+    const base = { todas: porTexto.length, cotizacion: 0, taller: 0, confirmada: 0 }
+    for (const v of porTexto) {
+      const etapa = etapaDe(v)
+      if (etapa in base) base[etapa] += 1
+    }
+    return base
+  }, [porTexto])
+
+  const filtradas = useMemo(
+    () => (filtro === 'todas' ? porTexto : porTexto.filter((v) => etapaDe(v) === filtro)),
+    [porTexto, filtro]
+  )
+
+  /* Lo que le importa a quien abre la pantalla: cuánto hay ofrecido sin
+     respuesta y cuánto ya se cerró. Van en el mismo renglón del título. */
+  const resumen = useMemo(() => {
+    const abiertas = ventas.filter((v) => v.estado === 'cotizacion' && !v.aprobada_en)
+    return {
+      abiertas: abiertas.length,
+      ofrecido: abiertas.reduce((a, v) => a + Number(v.total ?? 0), 0),
+      enTaller: ventas.filter((v) => v.aprobada_en).length,
+    }
+  }, [ventas])
+
+  const hayFiltro = busqueda.trim() !== '' || filtro !== 'todas'
 
   /* Aprobar es mandar el auto al taller con el trabajo ya acordado. La base
      hace la orden, le copia los renglones y sella quién aprobó, todo junto;
@@ -113,111 +181,238 @@ export default function Ventas() {
 
   return (
     <>
-      <Encabezado titulo="Ventas" detalle="Cotizaciones y comprobantes del local.">
+      {/* Título y resumen en un renglón, como en Stock: lo que se viene a
+          mirar es la lista, no la cabecera. */}
+      <Encabezado
+        titulo="Ventas"
+        resumen={
+          <>
+            {numero(resumen.abiertas)} sin responder ·{' '}
+            <span className="font-medium text-caucho-700">{plata(resumen.ofrecido)}</span> ofrecido
+            {resumen.enTaller > 0 && ` · ${numero(resumen.enTaller)} en el taller`}
+          </>
+        }
+      >
         <Boton onClick={() => setCreando(true)}>
           <Plus size={16} /> Nueva venta
         </Boton>
       </Encabezado>
 
+      <Tarjeta className="mb-3 p-3">
+        <div className="relative">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-acero-400"
+            aria-hidden="true"
+          />
+          <input
+            className={`${estiloInput} pl-9 ${busqueda ? 'pr-10' : ''}`}
+            placeholder="Buscar por cliente, vehículo, patente o vendedor…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          {busqueda && (
+            <button
+              type="button"
+              onClick={() => setBusqueda('')}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-acero-400 transition-colors hover:bg-concreto-100 hover:text-caucho-800"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          {FILTROS.map((f) => (
+            <Chip
+              key={f.valor}
+              activo={filtro === f.valor}
+              cantidad={conteos[f.valor]}
+              onClick={() => setFiltro(f.valor)}
+            >
+              {f.texto}
+            </Chip>
+          ))}
+          {hayFiltro && (
+            <button
+              onClick={() => {
+                setBusqueda('')
+                setFiltro('todas')
+              }}
+              className="rounded-full px-3 py-1.5 text-sm font-medium text-acero-500 underline-offset-4 transition-colors hover:text-perez-700 hover:underline"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+      </Tarjeta>
+
       {error && <Aviso>{error}</Aviso>}
       <Aviso>{aviso}</Aviso>
 
-      <Tarjeta>
+      <Tarjeta className="overflow-hidden">
         {cargando ? (
-          <Cargando texto="Buscando ventas…" alto="min-h-[40vh]" />
-        ) : !datos?.length ? (
-          <Vacio icono={Receipt} titulo="Todavía no hay ventas" detalle="Cargá la primera desde «Nueva venta»." />
+          <Esqueleto filas={8} />
+        ) : filtradas.length === 0 ? (
+          <Vacio
+            icono={Receipt}
+            titulo={hayFiltro ? 'Ninguna venta coincide' : 'Todavía no hay ventas'}
+            detalle={
+              hayFiltro
+                ? 'Probá con otra búsqueda o quitá los filtros.'
+                : 'Cargá la primera desde «Nueva venta».'
+            }
+          />
         ) : (
-          <Tabla
-            columnas={['Fecha', 'Cliente', 'Vendedor', 'Ítems', 'Total', 'Estado', 'Comprobante', '']}
-          >
-            {datos.map((v) => (
-              <tr key={v.id} className="hover:bg-concreto-50 rounded-xl bg-white shadow-sm sm:bg-transparent sm:shadow-none">
-                <td data-label="Fecha" className="px-4 py-3 whitespace-nowrap text-acero-500">
-                  {fecha(v.creada_en)}
-                </td>
-                <td data-label="Cliente" className="px-4 py-3 font-medium">
-                  {v.clientes?.nombre ?? 'Consumidor final'}
-                  {v.vehiculos && (
-                    <span className="block text-xs font-normal text-acero-500">
-                      {nombreVehiculo(v.vehiculos)}
-                      {v.vehiculos.patente ? ` · ${v.vehiculos.patente}` : ''}
-                    </span>
-                  )}
-                </td>
-                <td data-label="Vendedor" className="px-4 py-3 text-acero-500">
-                  {v.perfiles?.nombre ?? '—'}
-                </td>
-                <td data-label="Ítems" className="px-4 py-3 font-mono">
-                  {v.venta_items?.length ?? 0}
-                </td>
-                <td data-label="Total" className="px-4 py-3 font-semibold tabular-nums">
-                  {plata(v.total)}
-                </td>
-                <td data-label="Estado" className="px-4 py-3">
-                  {/* Una cotización aprobada sigue siendo una cotización para
-                      la base —se cobra al entregar el auto, no acá—, pero en
-                      la lista tiene que leerse como lo que es: un trabajo que
-                      ya está en el taller. */}
-                  {v.aprobada_en ? (
-                    <Etiqueta tono="marca">En el taller</Etiqueta>
-                  ) : (
-                    <Etiqueta tono={tonoEstado[v.estado]}>{textoEstado[v.estado]}</Etiqueta>
-                  )}
-                </td>
-                <td data-label="Comprobante" className="px-4 py-3">
-                  {v.comprobante ? (
-                    <Etiqueta tono={estadoDe(v.comprobante.estado).tono}>
-                      {estadoDe(v.comprobante.estado).texto}
-                    </Etiqueta>
-                  ) : (
-                    <span className="text-acero-500">—</span>
-                  )}
-                </td>
-                <td data-label="Acciones" className="px-4 py-3 text-right">
-                  {/* El auto ya está adentro: lo único que queda por hacer con
-                      esta cotización es ir a mirar cómo viene el trabajo. */}
-                  {v.orden && (
-                    <Boton
-                      variante="fantasma"
-                      className="px-2 py-1"
-                      onClick={() => navigate('/taller', { state: { orden: v.orden.id } })}
-                    >
-                      <Wrench size={15} /> Ver la orden
-                    </Boton>
-                  )}
+          <LazyMotion features={domAnimation}>
+            <Tabla
+              columnas={[
+                'Fecha',
+                'Cliente',
+                { texto: 'Total', cifra: true },
+                'Estado',
+                { texto: '' },
+              ]}
+            >
+              {filtradas.map((v, i) => {
+                const etapa = etapaDe(v)
+                const cotizaAbierta = etapa === 'cotizacion'
 
-                  {/* Aprobar es para el trabajo que se hace sobre un auto; una
-                      venta de mostrador no pasa por el taller y se cobra acá
-                      nomás. Lo que separa una de otra es el vehículo. */}
-                  {v.estado === 'cotizacion' && !v.aprobada_en && v.vehiculo_id && (
-                    <Boton variante="fantasma" className="px-2 py-1" onClick={() => setAprobando(v)}>
-                      <Wrench size={15} /> Aprobar y enviar al taller
-                    </Boton>
-                  )}
+                return (
+                  <m.tr
+                    key={v.id}
+                    /* Las filas llegan escalonadas, y solo las primeras: pasada
+                       la docena el retardo acumulado se convierte en espera, y
+                       lo que entra abajo ya está fuera de la vista. */
+                    initial={quieto ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, ease: SUAVE, delay: Math.min(i, 12) * 0.025 }}
+                    className="group bg-white transition-colors hover:bg-concreto-50 sm:bg-transparent"
+                  >
+                    <td data-label="Fecha" className="px-4 py-3 whitespace-nowrap text-acero-500">
+                      {fecha(v.creada_en)}
+                    </td>
 
-                  {v.estado === 'cotizacion' && !v.aprobada_en && (
-                    <Boton variante="fantasma" className="px-2 py-1" onClick={() => setConfirmando(v)}>
-                      <Check size={15} /> Confirmar
-                    </Boton>
-                  )}
-                  {v.estado === 'confirmada' && !v.comprobante && (
-                    <Boton variante="fantasma" className="px-2 py-1" onClick={() => facturar(v)}>
-                      <FileText size={15} /> Facturar
-                    </Boton>
-                  )}
-                  {/* Una venta ya facturada ante ARCA no se anula acá: hay un
-                      comprobante con CAE dando vueltas, y eso se revierte con
-                      una nota de crédito, que todavía no está. */}
-                  {v.estado === 'confirmada' && v.comprobante?.estado !== 'emitido' && (
-                    <Boton variante="fantasma" className="px-2 py-1" onClick={() => cambiarEstado(v, 'anulada')}>
-                      Anular
-                    </Boton>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </Tabla>
+                    <td data-label="Cliente" className="px-4 py-3">
+                      <p className="font-semibold text-caucho-900">
+                        {v.clientes?.nombre ?? 'Consumidor final'}
+                      </p>
+                      {/* El auto y el vendedor bajan a la segunda línea: eran
+                          dos columnas que empujaban el importe fuera de la
+                          vista y que nadie lee en horizontal. */}
+                      <p className="truncate text-xs text-acero-500">
+                        {v.vehiculos ? (
+                          <>
+                            {nombreVehiculo(v.vehiculos)}
+                            {v.vehiculos.patente && (
+                              <span className="font-mono"> · {v.vehiculos.patente}</span>
+                            )}
+                          </>
+                        ) : (
+                          'Mostrador'
+                        )}
+                        {v.perfiles?.nombre && ` · ${v.perfiles.nombre}`}
+                      </p>
+                    </td>
+
+                    <td data-label="Total" className="cifra px-4 py-3">
+                      <p className="font-semibold text-caucho-900">{plata(v.total)}</p>
+                      <p className="text-xs text-acero-500">
+                        {numero(v.venta_items?.length ?? 0)}{' '}
+                        {v.venta_items?.length === 1 ? 'ítem' : 'ítems'}
+                      </p>
+                    </td>
+
+                    <td data-label="Estado" className="px-4 py-3">
+                      {/* Una cotización aprobada sigue siendo una cotización
+                          para la base —se cobra al entregar el auto, no acá—,
+                          pero en la lista tiene que leerse como lo que es: un
+                          trabajo que ya está en el taller.
+
+                          El comprobante deja de ser columna propia: es el
+                          renglón de abajo del estado, y solo cuando existe. */}
+                      {etapa === 'taller' ? (
+                        <Etiqueta tono="marca">En el taller</Etiqueta>
+                      ) : (
+                        <Etiqueta tono={tonoEstado[v.estado]}>{textoEstado[v.estado]}</Etiqueta>
+                      )}
+                      {v.comprobante && (
+                        <span className="mt-1 block text-xs text-acero-500">
+                          {estadoDe(v.comprobante.estado).texto}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Una acción principal por fila y el resto en gris. Antes
+                        una cotización con auto mostraba dos botones idénticos
+                        —«Aprobar y enviar al taller» y «Confirmar»— y había que
+                        leerlos para saber cuál era el camino habitual. */}
+                    <td data-label="Acciones" className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                        {etapa === 'taller' && v.orden && (
+                          <Boton
+                            variante="secundario"
+                            className="px-2.5 py-1.5"
+                            onClick={() => navigate('/taller', { state: { orden: v.orden.id } })}
+                          >
+                            <Wrench size={15} /> Ver la orden
+                          </Boton>
+                        )}
+
+                        {/* El taller es para el trabajo sobre un auto; una venta
+                            de mostrador se cobra acá nomás. Lo que separa una de
+                            otra es el vehículo. */}
+                        {cotizaAbierta && v.vehiculo_id && (
+                          <Boton className="px-2.5 py-1.5" onClick={() => setAprobando(v)}>
+                            <Wrench size={15} /> Al taller
+                          </Boton>
+                        )}
+
+                        {cotizaAbierta && (
+                          <Boton
+                            variante={v.vehiculo_id ? 'fantasma' : 'secundario'}
+                            className="px-2.5 py-1.5"
+                            onClick={() => setConfirmando(v)}
+                          >
+                            <Check size={15} /> Cobrar
+                          </Boton>
+                        )}
+
+                        {v.estado === 'confirmada' && !v.comprobante && (
+                          <Boton
+                            variante="secundario"
+                            className="px-2.5 py-1.5"
+                            onClick={() => facturar(v)}
+                          >
+                            <FileText size={15} /> Facturar
+                          </Boton>
+                        )}
+
+                        {/* Anular no se ofrece: se busca. Aparece al pasar por
+                            la fila, y en el celular —donde no hay hover— queda
+                            siempre visible.
+
+                            Una venta ya facturada ante ARCA no se anula acá:
+                            hay un comprobante con CAE dando vueltas, y eso se
+                            revierte con una nota de crédito, que todavía no
+                            está. */}
+                        {v.estado === 'confirmada' && v.comprobante?.estado !== 'emitido' && (
+                          <Boton
+                            variante="fantasma"
+                            className="px-2.5 py-1.5 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                            onClick={() => cambiarEstado(v, 'anulada')}
+                          >
+                            Anular
+                          </Boton>
+                        )}
+                      </div>
+                    </td>
+                  </m.tr>
+                )
+              })}
+            </Tabla>
+          </LazyMotion>
         )}
       </Tarjeta>
 
@@ -247,6 +442,33 @@ export default function Ventas() {
         />
       )}
     </>
+  )
+}
+
+/* Mismo chip que el de Stock: si dos pantallas filtran igual, tienen que
+   verse igual. Lleva el conteo adentro porque un filtro que promete resultados
+   y devuelve una lista vacía se siente roto. */
+function Chip({ activo, cantidad, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-all duration-200 ${
+        activo
+          ? 'border-perez-600 bg-perez-600 text-white shadow-sm shadow-perez-900/20'
+          : 'border-concreto-200 bg-white text-caucho-700 hover:border-acero-300 hover:bg-concreto-50'
+      }`}
+    >
+      {children}
+      <span
+        className={`rounded-full px-1.5 text-xs font-semibold tabular-nums ${
+          activo ? 'bg-white/20 text-white' : 'bg-concreto-100 text-acero-500'
+        }`}
+      >
+        {numero(cantidad)}
+      </span>
+    </button>
   )
 }
 
