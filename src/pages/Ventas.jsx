@@ -41,7 +41,13 @@ export default function Ventas() {
     const [ventas, comprobantes, ordenes] = await Promise.all([
       supabase
         .from('ventas')
-        .select('*, clientes(nombre), perfiles(nombre), vehiculos(marca, modelo, anio, patente), venta_items(cantidad)')
+        /* El vendedor va por su clave y no por el nombre de la tabla: desde que
+           la cotización sella quién la aprobó, `ventas` apunta dos veces a
+           `perfiles` y pedir `perfiles(nombre)` a secas no devuelve la lista,
+           devuelve un error. */
+        .select(
+          '*, clientes(nombre), perfiles!ventas_vendedor_id_fkey(nombre), vehiculos(marca, modelo, anio, patente), venta_items(cantidad)'
+        )
         .order('creada_en', { ascending: false })
         .limit(100),
       supabase.from('comprobantes').select('venta_id, estado'),

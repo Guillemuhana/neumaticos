@@ -74,7 +74,7 @@ export default function Estadisticas() {
       await Promise.all([
       supabase
         .from('ventas')
-        .select('id, total, creada_en, estado, vendedor_id, perfiles(nombre)')
+        .select('id, total, creada_en, estado, vendedor_id, perfiles!ventas_vendedor_id_fkey(nombre)')
         .eq('estado', 'confirmada')
         .gte('creada_en', desde),
       supabase

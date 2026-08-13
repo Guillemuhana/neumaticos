@@ -330,7 +330,7 @@ const ejecutores = {
       sb
         .from('ventas')
         .select(
-          'total, medio_pago, creada_en, vendedor:perfiles(nombre), ' +
+          'total, medio_pago, creada_en, vendedor:perfiles!ventas_vendedor_id_fkey(nombre), ' +
             'venta_items(cantidad, precio_unitario, descripcion, producto:productos(marca, medida, categoria))'
         )
         .eq('estado', 'confirmada')
@@ -385,7 +385,10 @@ const ejecutores = {
 
     let q = sb
       .from('ventas')
-      .select('creada_en, estado, total, medio_pago, notas, cliente:clientes(nombre), vendedor:perfiles(nombre)')
+      .select(
+        'creada_en, estado, total, medio_pago, notas, cliente:clientes(nombre), ' +
+          'vendedor:perfiles!ventas_vendedor_id_fkey(nombre)'
+      )
       .gte('creada_en', arranque(desde))
       .lte('creada_en', cierre(hasta))
       .order('creada_en', { ascending: false })
