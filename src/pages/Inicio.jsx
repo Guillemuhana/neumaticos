@@ -285,7 +285,7 @@ function DiaMecanico() {
   const navigate = useNavigate()
 
   const { datos, cargando, error } = useConsulta(async () => {
-    const [mias, manoDeObra] = await Promise.all([
+    const [mias, manoDeObra, garantias] = await Promise.all([
       supabase
         .from('ordenes')
         .select('id, vehiculo, patente, estado, creada_en, cerrada_en, falla_reportada, clientes(nombre)')

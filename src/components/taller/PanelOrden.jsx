@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, FileText, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, FileText, Plus, Printer, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthProvider'
 import { useConsulta } from '../../hooks/useConsulta'
+import { useEmpresa } from '../../hooks/useEmpresa'
+import { useImpresion } from '../../hooks/useImpresion'
 import { supabase } from '../../lib/supabase'
 import { fecha, fechaCorta, numero, plata } from '../../lib/formato'
 import { estadoDe, numeroComprobante, tipoDe } from '../../lib/fiscal'
@@ -17,6 +19,7 @@ import {
   puedeVerMontos,
 } from '../../lib/taller'
 import FotosVehiculo from './FotosVehiculo'
+import PresupuestoImpreso from '../PresupuestoImpreso'
 import { Aviso, Boton, Campo, Cargando, Etiqueta, Modal, estiloInput } from '../UI'
 
 /* La orden completa, con lo que cada puesto necesita ver y solo lo que puede
@@ -31,6 +34,8 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
      de avanzar de una abre su formulario. El resto de los pasos siguen siendo
      un solo clic: pedir confirmación en cada etapa cansa y no protege nada. */
   const [entregando, setEntregando] = useState(false)
+  const [hoja, imprimirHoja] = useImpresion()
+  const empresa = useEmpresa()
 
   const etapa = etapaDe(orden.estado)
   const paso = avanceDe(orden.estado, rol)
@@ -54,6 +59,47 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
   const refrescar = () => {
     items.recargar()
     onCambio()
+  }
+
+  /* La orden en papel sale de lo que ya está en pantalla: los renglones se
+     cargaron al abrir el panel, así que imprimir no vuelve a consultar nada.
+
+     Sin importes para el taller. La hoja de trabajo del mecánico y el detalle
+     que se le da al cliente son el mismo papel con distinto lector, y quien la
+     imprime decide cuál de los dos está mirando. */
+  const imprimirOrden = () => {
+    const conPlata = puedeVerMontos(rol)
+
+    imprimirHoja({
+      titulo: conPlata ? 'Orden de trabajo' : 'Hoja de trabajo',
+      fecha: orden.creada_en,
+      datos: [
+        ['Vehículo', orden.vehiculo],
+        ['Patente', orden.patente],
+        ['Cliente', orden.clientes?.nombre],
+        ['Teléfono', orden.clientes?.telefono],
+        ['Kilometraje', orden.kilometraje ? `${numero(orden.kilometraje)} km` : null],
+        ['Estado', etapa.texto],
+      ],
+      renglones: (items.datos ?? []).map((i) => ({
+        id: i.id,
+        descripcion: `${i.tipo === 'repuesto' ? 'Repuesto' : 'Mano de obra'} · ${i.descripcion}`,
+        cantidad: i.cantidad,
+        precio_unitario: conPlata ? i.precio_unitario : null,
+      })),
+      total: conPlata ? total : null,
+      notas: [
+        orden.falla_reportada && `Lo que pidió el cliente: ${orden.falla_reportada}`,
+        orden.diagnostico && `Diagnóstico: ${orden.diagnostico}`,
+        orden.hallazgos && `Hallazgos: ${orden.hallazgos}`,
+        orden.notas,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      leyenda: conPlata
+        ? 'Los importes corresponden al plan de trabajo al momento de imprimir y pueden variar si se suman tareas. No es un comprobante fiscal.'
+        : 'Hoja de trabajo interna. No es un presupuesto ni un comprobante.',
+    })
   }
 
   const avanzar = async (entrega = null) => {
@@ -179,10 +225,20 @@ export default function PanelOrden({ orden, onCerrar, onCambio }) {
           />
         )}
 
+        {hoja && <PresupuestoImpreso {...hoja} empresa={empresa} />}
+
         <div className="flex flex-wrap justify-end gap-2 border-t border-concreto-200 pt-4">
           <Boton variante="secundario" onClick={onCerrar}>
             Cerrar
           </Boton>
+
+          {/* La orden en papel: la que se pega al parabrisas mientras el auto
+              está adentro, y la que se le da al cliente al entregar. Al
+              mecánico le sale sin importes, igual que la pantalla. */}
+          <Boton variante="secundario" onClick={imprimirOrden} disabled={items.cargando}>
+            <Printer size={15} /> Imprimir
+          </Boton>
+
           {paso ? (
             <Boton
               onClick={() => (paso.destino === 'entregada' ? setEntregando(true) : avanzar())}

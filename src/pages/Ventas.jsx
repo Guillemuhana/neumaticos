@@ -1,9 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { domAnimation, LazyMotion, m, useReducedMotion } from 'motion/react'
-import { Camera, Check, FileText, Plus, Receipt, Search, Trash2, Wrench, X } from 'lucide-react'
+import {
+  Camera,
+  Check,
+  FileText,
+  Plus,
+  Printer,
+  Receipt,
+  Search,
+  Trash2,
+  Wrench,
+  X,
+} from 'lucide-react'
 import { useAuth } from '../context/AuthProvider'
 import { useConsulta } from '../hooks/useConsulta'
+import { useEmpresa } from '../hooks/useEmpresa'
+import { useImpresion } from '../hooks/useImpresion'
 import { supabase } from '../lib/supabase'
 import { subirFotoDeOrden } from '../lib/fotos'
 import { fecha, numero, plata } from '../lib/formato'
@@ -11,6 +24,8 @@ import { estadoDe } from '../lib/fiscal'
 import { nombreVehiculo } from '../lib/vehiculos'
 import BuscadorCliente from '../components/clientes/BuscadorCliente'
 import SelectorVehiculo, { asegurarVehiculo } from '../components/clientes/SelectorVehiculo'
+import BuscadorProducto from '../components/stock/BuscadorProducto'
+import PresupuestoImpreso from '../components/PresupuestoImpreso'
 import {
   Aviso,
   Boton,
@@ -56,6 +71,11 @@ export default function Ventas() {
   const [confirmando, setConfirmando] = useState(null)
   const [aprobando, setAprobando] = useState(null)
   const [aviso, setAviso] = useState('')
+  const [hoja, imprimirHoja] = useImpresion()
+  /* Qué fila está juntando sus renglones. Es aparte de la hoja porque entre el
+     clic y el diálogo hay una consulta, y el botón tiene que decirlo. */
+  const [preparando, setPreparando] = useState(null)
+  const empresa = useEmpresa()
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('todas')
   const quieto = useReducedMotion()
@@ -207,6 +227,46 @@ export default function Ventas() {
     if (error) setAviso(error.message)
     setConfirmando(null)
     recargar()
+  }
+
+  /* El presupuesto en papel, que es lo que el cliente se lleva para pensarlo o
+     para comparar. Los renglones no están en la lista —se traen los conteos,
+     no el detalle— así que se piden recién al imprimir: cargar el detalle de
+     cien ventas para que se imprima una sería pagar por adelantado algo que
+     casi nunca se usa. */
+  const imprimir = async (venta) => {
+    setAviso('')
+    setPreparando(venta.id)
+
+    const { data, error } = await supabase
+      .from('venta_items')
+      .select('id, cantidad, precio_unitario, descripcion, productos(marca, medida)')
+      .eq('venta_id', venta.id)
+
+    setPreparando(null)
+    if (error) return setAviso(error.message)
+
+    imprimirHoja({
+      titulo: 'Presupuesto',
+      fecha: venta.creada_en,
+      datos: [
+        ['Cliente', venta.clientes?.nombre ?? 'Consumidor final'],
+        ['Atendió', venta.perfiles?.nombre],
+        ['Vehículo', venta.vehiculos ? nombreVehiculo(venta.vehiculos) : null],
+        ['Patente', venta.vehiculos?.patente],
+      ],
+      renglones: data.map((i) => ({
+        id: i.id,
+        descripcion:
+          i.descripcion ||
+          [i.productos?.marca, i.productos?.medida].filter(Boolean).join(' ') ||
+          'Artículo',
+        cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario,
+      })),
+      total: venta.total,
+      notas: venta.notas,
+    })
   }
 
   /* Arma el comprobante y deja al usuario en Facturación, que es donde se
@@ -418,6 +478,20 @@ export default function Ventas() {
                           </Boton>
                         )}
 
+                        {/* El presupuesto en papel: se imprime la cotización
+                            abierta para que el cliente se la lleve, y también
+                            una vieja, que es cuando vuelve preguntando qué le
+                            habíamos pasado. */}
+                        <Boton
+                          variante="fantasma"
+                          className="px-2.5 py-1.5"
+                          onClick={() => imprimir(v)}
+                          disabled={preparando === v.id}
+                        >
+                          <Printer size={15} />
+                          {preparando === v.id ? 'Preparando…' : 'Imprimir'}
+                        </Boton>
+
                         {v.estado === 'confirmada' && !v.comprobante && (
                           <Boton
                             variante="secundario"
@@ -470,6 +544,8 @@ export default function Ventas() {
           onConfirmar={(medio) => cambiarEstado(confirmando, 'confirmada', medio)}
         />
       )}
+
+      {hoja && <PresupuestoImpreso {...hoja} empresa={empresa} />}
 
       {creando && (
         <NuevaVenta
@@ -525,8 +601,16 @@ function NuevaVenta({ onCerrar, onGuardada }) {
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
 
+  /* El buscador filtra por código y descripción además de por marca y medida,
+     así que las trae desde acá: pedirlas después sería otra consulta para algo
+     que ya estaba a un campo de distancia. */
   const { datos: productos } = useConsulta(
-    () => supabase.from('productos').select('id, marca, medida, precio, stock').eq('activo', true).order('marca'),
+    () =>
+      supabase
+        .from('productos')
+        .select('id, codigo, categoria, marca, medida, descripcion, precio, stock')
+        .eq('activo', true)
+        .order('marca'),
     []
   )
   const { datos: vendedores } = useConsulta(
@@ -655,22 +739,15 @@ function NuevaVenta({ onCerrar, onGuardada }) {
           </Campo>
         )}
 
-        <Campo etiqueta="Agregar artículo">
-          <select
-            className={estiloInput}
-            value=""
-            onChange={(e) => {
-              const p = productos?.find((x) => x.id === e.target.value)
-              if (p) agregar(p)
-            }}
-          >
-            <option value="">Elegí un artículo…</option>
-            {productos?.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.marca} {p.medida} — {plata(p.precio)} (stock {p.stock})
-              </option>
-            ))}
-          </select>
+        <Campo
+          etiqueta="Agregar artículo"
+          ayuda="Buscá por marca, medida o código. Sin nada escrito se ve el catálogo entero."
+        >
+          <BuscadorProducto
+            productos={productos}
+            elegidos={items.map((i) => i.producto_id)}
+            onElegir={agregar}
+          />
         </Campo>
 
         {items.length > 0 && (

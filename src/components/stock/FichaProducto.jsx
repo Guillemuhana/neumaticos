@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { Check, Copy, ImageOff, Pencil, Share2 } from 'lucide-react'
+import { Check, Copy, ImageOff, Pencil, Printer, Share2 } from 'lucide-react'
 import { numero, plata } from '../../lib/formato'
-import { Aviso, Boton, Etiqueta, Modal } from '../UI'
+import { useEmpresa } from '../../hooks/useEmpresa'
+import { useImpresion } from '../../hooks/useImpresion'
+import PresupuestoImpreso from '../PresupuestoImpreso'
+import { Aviso, Boton, Campo, Etiqueta, Modal, estiloInput } from '../UI'
 
 /* La ficha del artículo, pensada para el mostrador: se busca el repuesto y se
    le muestra la pantalla al cliente. Por eso lo grande es la foto, el precio y
@@ -18,6 +21,12 @@ const disponibilidad = (p) => {
 export default function FichaProducto({ producto: p, gestiona, onCerrar, onEditar }) {
   const [copiado, setCopiado] = useState(false)
   const [error, setError] = useState('')
+  /* La consulta del mostrador casi nunca es por una unidad: se pregunta por el
+     juego de cuatro, o por dos. El presupuesto sale con la cantidad que se
+     charló, no con una que después hay que multiplicar a mano. */
+  const [cantidad, setCantidad] = useState('1')
+  const [hoja, imprimir] = useImpresion()
+  const empresa = useEmpresa()
 
   const estado = disponibilidad(p)
   const titulo = [p.marca, p.medida].filter(Boolean).join(' ')
@@ -38,6 +47,28 @@ export default function FichaProducto({ producto: p, gestiona, onCerrar, onEdita
   ]
     .filter(Boolean)
     .join('\n')
+
+  const presupuestar = () => {
+    const cant = Math.max(1, Number(cantidad) || 1)
+
+    imprimir({
+      titulo: 'Presupuesto',
+      fecha: new Date(),
+      datos: [
+        ['Artículo', titulo],
+        ['Código', p.codigo],
+        ['Disponibilidad', estado.texto === 'Sin stock' ? 'Sin stock, se pide' : estado.pie],
+      ],
+      renglones: [
+        {
+          descripcion: [titulo, p.descripcion].filter(Boolean).join(' — '),
+          cantidad: cant,
+          precio_unitario: precio,
+        },
+      ],
+      total: precio * cant,
+    })
+  }
 
   const compartir = async () => {
     setError('')
@@ -121,7 +152,35 @@ export default function FichaProducto({ producto: p, gestiona, onCerrar, onEdita
           </div>
         )}
 
+        {/* El cliente que pregunta por un artículo y se va a pensarlo: se
+            lleva el precio por escrito, con la fecha y las condiciones. Sin
+            esto, el mostrador se lo anota en un papel suelto y a la semana
+            nadie sabe qué se le había dicho. */}
+        <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-concreto-200 p-3">
+          <Campo etiqueta="Cantidad a presupuestar">
+            <input
+              type="number"
+              min="1"
+              step="1"
+              className={`${estiloInput} w-28`}
+              value={cantidad}
+              onChange={(e) => setCantidad(e.target.value)}
+            />
+          </Campo>
+          <div className="text-right">
+            <p className="text-xs text-acero-500">Total del presupuesto</p>
+            <p className="display text-lg font-bold text-caucho-950">
+              {plata(precio * Math.max(1, Number(cantidad) || 1))}
+            </p>
+          </div>
+          <Boton variante="secundario" onClick={presupuestar}>
+            <Printer size={15} /> Imprimir presupuesto
+          </Boton>
+        </div>
+
         <Aviso>{error}</Aviso>
+
+        {hoja && <PresupuestoImpreso {...hoja} empresa={empresa} />}
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-concreto-200 pt-4">
           <Boton variante="secundario" onClick={onCerrar}>
